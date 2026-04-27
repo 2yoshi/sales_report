@@ -156,6 +156,6 @@ npx shadcn@latest add form
 | 変数名 | 説明 |
 |--------|------|
 | `DATABASE_URL` | PostgreSQL 接続文字列 |
-| `JWT_SECRET` | JWT 署名シークレット |
+| `JWT_SECRET` | JWT 署名シークレット（**本番環境では必ず強いランダム文字列に変更**） |
 | `JWT_EXPIRES_IN` | JWT 有効期限（秒）デフォルト: `86400` |
 | `NEXT_PUBLIC_API_BASE_URL` | API ベース URL |

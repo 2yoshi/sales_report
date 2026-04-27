@@ -24,6 +24,6 @@ export interface ApiError {
   error: {
     code: string
     message: string
-    details?: unknown[]
+    details?: { field: string; message: string }[]
   }
 }
