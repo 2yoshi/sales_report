@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Role {
+  sales
+  manager
+  admin
+}
+
+// ─────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @db.VarChar(100)
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash")
+  role         Role
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  dailyReports DailyReport[]
+  comments     Comment[]
+
+  @@map("users")
+}
+
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(100)
+  company   String?  @db.VarChar(200)
+  phone     String?  @db.VarChar(20)
+  email     String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  visitRecords VisitRecord[]
+
+  @@map("customers")
+}
+
+model DailyReport {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  reportDate DateTime @map("report_date") @db.Date
+  problem    String   @db.VarChar(2000)
+  plan       String   @db.VarChar(2000)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id])
+  visitRecords VisitRecord[]
+  comments     Comment[]
+
+  @@unique([userId, reportDate])
+  @@map("daily_reports")
+}
+
+model VisitRecord {
+  id            String @id @default(uuid()) @db.Uuid
+  dailyReportId String @map("daily_report_id") @db.Uuid
+  customerId    String @map("customer_id") @db.Uuid
+  content       String @db.VarChar(1000)
+  sortOrder     Int    @map("sort_order")
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  customer    Customer    @relation(fields: [customerId], references: [id])
+
+  @@map("visit_records")
+}
+
+model Comment {
+  id            String   @id @default(uuid()) @db.Uuid
+  dailyReportId String   @map("daily_report_id") @db.Uuid
+  commenterId   String   @map("commenter_id") @db.Uuid
+  body          String   @db.VarChar(2000)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  dailyReport DailyReport @relation(fields: [dailyReportId], references: [id], onDelete: Cascade)
+  commenter   User        @relation(fields: [commenterId], references: [id])
+
+  @@map("comments")
+}

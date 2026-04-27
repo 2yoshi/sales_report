@@ -1,0 +1,18 @@
+FROM node:20-alpine
+WORKDIR /app
+
+# prisma が必要とするネイティブ依存のため openssl を追加
+RUN apk add --no-cache openssl
+
+COPY package.json package-lock.json* ./
+# HUSKY=0 で Docker 内の npm ci 時に Husky のインストールをスキップ
+RUN HUSKY=0 npm ci
+
+COPY . .
+
+RUN npx prisma generate
+
+EXPOSE 3000
+
+# 開発サーバー起動前に lint チェックを実行
+CMD ["sh", "-c", "npm run lint && npm run dev"]

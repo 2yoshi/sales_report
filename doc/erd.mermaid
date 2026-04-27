@@ -1,0 +1,52 @@
+erDiagram
+  users {
+    uuid id PK
+    string name
+    string email
+    string role "sales / manager / admin"
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  customers {
+    uuid id PK
+    string name
+    string company
+    string phone
+    string email
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  daily_reports {
+    uuid id PK
+    uuid user_id FK
+    date report_date
+    text problem
+    text plan
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  visit_records {
+    uuid id PK
+    uuid daily_report_id FK
+    uuid customer_id FK
+    text content
+    int sort_order
+  }
+
+  comments {
+    uuid id PK
+    uuid daily_report_id FK
+    uuid commenter_id FK
+    text body
+    timestamp created_at
+    timestamp updated_at
+  }
+
+  users ||--o{ daily_reports : "作成する"
+  daily_reports ||--o{ visit_records : "含む"
+  customers ||--o{ visit_records : "訪問される"
+  daily_reports ||--o{ comments : "コメントされる"
+  users ||--o{ comments : "投稿する"

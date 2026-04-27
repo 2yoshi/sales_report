@@ -1,0 +1,62 @@
+/cleearname: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+env:
+  PROJECT_ID: sales-report-493809
+  REGION: asia-northeast1
+  SERVICE_NAME: sales-report
+  REGISTRY: asia-northeast1-docker.pkg.dev/sales-report-493809/sales-report/app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write   # Workload Identity Federation に必要
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Workload Identity Federation で認証
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      # Docker を Artifact Registry へ向ける
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # イメージをビルドしてプッシュ
+      - name: Build and push image
+        run: |
+          docker build \
+            --tag ${{ env.REGISTRY }}:${{ github.sha }} \
+            --tag ${{ env.REGISTRY }}:latest \
+            .
+          docker push ${{ env.REGISTRY }}:${{ github.sha }}
+          docker push ${{ env.REGISTRY }}:latest
+
+      # Cloud Run へデプロイ
+      - id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ env.REGISTRY }}:${{ github.sha }}
+          region: ${{ env.REGION }}
+          flags: >-
+            --set-secrets=DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest
+            --min-instances=0
+            --max-instances=10
+            --memory=512Mi
+            --cpu=1
+            --timeout=30s
+            --concurrency=80
+            --allow-unauthenticated
+
+      - name: Show deployed URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"
