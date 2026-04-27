@@ -1,14 +1,10 @@
 import { addToBlacklist } from './blacklist'
 
-export interface LogoutResult {
-  message: string
-}
-
 /**
- * Invalidates the given JWT by adding it to the in-memory blacklist.
+ * Invalidates the given JWT by persisting it to the token blacklist.
  * All subsequent requests presenting this token will receive a 401.
  */
-export function logoutUser(token: string): LogoutResult {
-  addToBlacklist(token)
+export async function logoutUser(token: string) {
+  await addToBlacklist(token)
   return { message: 'ログアウトしました' }
 }

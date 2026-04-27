@@ -1,42 +1,84 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// clearBlacklist() は公開 API ではないため、各テスト前にモジュールを再ロードして
-// インメモリ Set をリセットする。これにより テスト間の状態汚染を防ぐ。
-let addToBlacklist: (token: string) => void
-let isBlacklisted: (token: string) => boolean
+// Use vi.hoisted so the mock fns are available inside the vi.mock factory
+const { mockUpsert, mockFindFirst } = vi.hoisted(() => ({
+  mockUpsert: vi.fn(),
+  mockFindFirst: vi.fn(),
+}))
 
-beforeEach(async () => {
-  vi.resetModules()
-  const mod = await import('./blacklist')
-  addToBlacklist = mod.addToBlacklist
-  isBlacklisted = mod.isBlacklisted
-})
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    tokenBlacklist: {
+      upsert: (...args: unknown[]) => mockUpsert(...args),
+      findFirst: (...args: unknown[]) => mockFindFirst(...args),
+    },
+  },
+}))
 
-describe('isBlacklisted', () => {
-  it('returns false for a token that has not been blacklisted', () => {
-    const token = 'token-that-was-never-added'
-    expect(isBlacklisted(token)).toBe(false)
-  })
+import { addToBlacklist, isBlacklisted } from './blacklist'
 
-  it('returns true for a token that has been added to the blacklist', () => {
-    const token = 'blacklisted-token-abc123'
-    addToBlacklist(token)
-    expect(isBlacklisted(token)).toBe(true)
-  })
+beforeEach(() => {
+  vi.clearAllMocks()
 })
 
 describe('addToBlacklist', () => {
-  it('adding the same token twice is idempotent — isBlacklisted still returns true', () => {
-    const token = 'idempotent-token-xyz789'
-    addToBlacklist(token)
-    addToBlacklist(token)
-    expect(isBlacklisted(token)).toBe(true)
+  it('calls prisma.tokenBlacklist.upsert with the token and an expiresAt in the future', async () => {
+    mockUpsert.mockResolvedValueOnce({})
+    const before = new Date()
+
+    await addToBlacklist('some-token')
+
+    expect(mockUpsert).toHaveBeenCalledOnce()
+    const [call] = mockUpsert.mock.calls
+    expect(call[0].where).toEqual({ token: 'some-token' })
+    expect(call[0].create.token).toBe('some-token')
+    expect(call[0].create.expiresAt).toBeInstanceOf(Date)
+    expect(call[0].create.expiresAt > before).toBe(true)
   })
 
-  it('blacklisting one token does not affect other tokens', () => {
-    const tokenA = 'token-aaa'
-    const tokenB = 'token-bbb'
-    addToBlacklist(tokenA)
-    expect(isBlacklisted(tokenB)).toBe(false)
+  it('calling addToBlacklist twice with the same token is idempotent (upsert, not insert)', async () => {
+    mockUpsert.mockResolvedValue({})
+
+    await addToBlacklist('idempotent-token')
+    await addToBlacklist('idempotent-token')
+
+    expect(mockUpsert).toHaveBeenCalledTimes(2)
+    // Both calls target the same token — the DB upsert handles deduplication
+    expect(mockUpsert.mock.calls[0][0].where).toEqual({ token: 'idempotent-token' })
+    expect(mockUpsert.mock.calls[1][0].where).toEqual({ token: 'idempotent-token' })
+  })
+})
+
+describe('isBlacklisted', () => {
+  it('returns true when prisma finds a matching non-expired entry', async () => {
+    mockFindFirst.mockResolvedValueOnce({ id: 'some-id', token: 'blacklisted-token' })
+
+    const result = await isBlacklisted('blacklisted-token')
+
+    expect(result).toBe(true)
+    expect(mockFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ token: 'blacklisted-token' }),
+      }),
+    )
+  })
+
+  it('returns false when prisma finds no matching entry', async () => {
+    mockFindFirst.mockResolvedValueOnce(null)
+
+    const result = await isBlacklisted('clean-token')
+
+    expect(result).toBe(false)
+  })
+
+  it('passes an expiresAt gt filter so expired entries are ignored', async () => {
+    mockFindFirst.mockResolvedValueOnce(null)
+    const before = new Date()
+
+    await isBlacklisted('any-token')
+
+    const where = mockFindFirst.mock.calls[0][0].where
+    expect(where.expiresAt.gt).toBeInstanceOf(Date)
+    expect(where.expiresAt.gt >= before).toBe(true)
   })
 })

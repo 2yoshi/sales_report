@@ -3,16 +3,15 @@ import { NextRequest } from 'next/server'
 import { generateToken } from '@/lib/auth/jwt'
 import type { AuthUser } from '@/types'
 
-// Control the blacklist state without relying on the in-memory singleton
+// Control the blacklist state; mock returns Promises since blacklist is now async.
 const blacklistedSet = new Set<string>()
 
 vi.mock('@/lib/auth/blacklist', () => ({
-  addToBlacklist: (token: string) => blacklistedSet.add(token),
-  isBlacklisted: (token: string) => blacklistedSet.has(token),
+  addToBlacklist: (token: string) => Promise.resolve(blacklistedSet.add(token)),
+  isBlacklisted: (token: string) => Promise.resolve(blacklistedSet.has(token)),
 }))
 
-// Import the route handler after mocks are set up
-const { POST } = await import('./route')
+import { POST } from './route'
 
 const salesUser: AuthUser = {
   id: 'user-001',
