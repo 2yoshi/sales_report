@@ -18,7 +18,11 @@ type AuthExtractResult =
 
 /**
  * Extracts and validates a Bearer token from an Authorization header value.
- * Shared by middleware and withAuth to avoid duplicating auth logic.
+ * This function is Edge-compatible (no Prisma/Node.js-only APIs) and is shared
+ * by the Next.js middleware and withAuth.
+ *
+ * NOTE: Blacklist checking requires Prisma and is intentionally omitted here.
+ * It is performed inside withAuth, which runs in the Node.js runtime.
  */
 export function extractBearerAuth(authHeader: string | null): AuthExtractResult {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -31,9 +35,6 @@ export function extractBearerAuth(authHeader: string | null): AuthExtractResult 
   } catch {
     return { ok: false, code: 'UNAUTHORIZED', message: 'Invalid or expired token' }
   }
-  if (isBlacklisted(token)) {
-    return { ok: false, code: 'UNAUTHORIZED', message: 'Token has been invalidated' }
-  }
   return { ok: true, user, token }
 }
 
@@ -41,6 +42,7 @@ type AuthedRouteHandler = (
   req: NextRequest,
   context: Record<string, unknown>,
   user: AuthUser,
+  token: string,
 ) => Promise<NextResponse>
 
 type WrappedRouteHandler = (
@@ -58,7 +60,14 @@ export function withAuth(handler: AuthedRouteHandler, roles?: UserRole[]): Wrapp
       )
     }
 
-    const { user } = result
+    const { user, token } = result
+
+    if (await isBlacklisted(token)) {
+      return NextResponse.json(
+        { error: { code: 'UNAUTHORIZED', message: 'Token has been invalidated' } },
+        { status: 401 },
+      )
+    }
 
     if (roles && roles.length > 0) {
       const checkRole = requireRole(roles)
@@ -75,6 +84,6 @@ export function withAuth(handler: AuthedRouteHandler, roles?: UserRole[]): Wrapp
       }
     }
 
-    return handler(req, context, user)
+    return handler(req, context, user, token)
   }
 }

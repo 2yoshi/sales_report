@@ -1,17 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { requireRole, extractBearerAuth } from './guard'
+import { NextRequest } from 'next/server'
+import { requireRole, extractBearerAuth, withAuth } from './guard'
 import { AppError } from '@/lib/errors/AppError'
 import { generateToken } from './jwt'
 import jwt from 'jsonwebtoken'
 import type { AuthUser } from '@/types'
 
-// blacklist モジュールをモック化してテスト間の状態汚染を防ぐ
-// clearBlacklist() は公開 API ではないため、vi.mock で制御する
+// blacklist モジュールをモック化してテスト間の状態汚染を防ぐ。
+// isBlacklisted は async なので Promise を返すよう設定する。
 const blacklistedSet = new Set<string>()
 
 vi.mock('./blacklist', () => ({
-  addToBlacklist: (token: string) => blacklistedSet.add(token),
-  isBlacklisted: (token: string) => blacklistedSet.has(token),
+  addToBlacklist: (token: string) => Promise.resolve(blacklistedSet.add(token)),
+  isBlacklisted: (token: string) => Promise.resolve(blacklistedSet.has(token)),
 }))
 
 const salesUser: AuthUser = {
@@ -140,17 +141,6 @@ describe('extractBearerAuth', () => {
     }
   })
 
-  it('returns ok:false for a blacklisted token', () => {
-    const token = generateToken(salesUser)
-    blacklistedSet.add(token)
-    const result = extractBearerAuth(`Bearer ${token}`)
-    expect(result.ok).toBe(false)
-    if (!result.ok) {
-      expect(result.code).toBe('UNAUTHORIZED')
-      expect(result.message).toBe('Token has been invalidated')
-    }
-  })
-
   it('returns ok:true with correct user fields for a valid token', () => {
     const token = generateToken(salesUser)
     const result = extractBearerAuth(`Bearer ${token}`)
@@ -179,5 +169,51 @@ describe('extractBearerAuth', () => {
     // Not blacklisted in this test — should pass
     const result = extractBearerAuth(`Bearer ${token}`)
     expect(result.ok).toBe(true)
+  })
+})
+
+describe('withAuth', () => {
+  function makeRequest(authHeader?: string): NextRequest {
+    return new NextRequest('http://localhost/api/test', {
+      method: 'GET',
+      headers: authHeader ? { authorization: authHeader } : {},
+    })
+  }
+
+  it('returns 401 for a blacklisted token', async () => {
+    const token = generateToken(salesUser)
+    blacklistedSet.add(token)
+
+    const handler = withAuth(vi.fn())
+    const res = await handler(makeRequest(`Bearer ${token}`), {})
+    const body = await res.json()
+
+    expect(res.status).toBe(401)
+    expect(body.error.code).toBe('UNAUTHORIZED')
+    expect(body.error.message).toBe('Token has been invalidated')
+  })
+
+  it('passes the extracted token as the fourth argument to the handler', async () => {
+    const token = generateToken(salesUser)
+    const handlerFn = vi.fn().mockResolvedValue(new Response('ok'))
+
+    const handler = withAuth(handlerFn)
+    await handler(makeRequest(`Bearer ${token}`), {})
+
+    expect(handlerFn).toHaveBeenCalledOnce()
+    const [, , , passedToken] = handlerFn.mock.calls[0]
+    expect(passedToken).toBe(token)
+  })
+
+  it('calls the handler when token is valid and not blacklisted', async () => {
+    const token = generateToken(adminUser)
+    const handlerFn = vi.fn().mockResolvedValue(new Response('ok'))
+
+    const handler = withAuth(handlerFn)
+    await handler(makeRequest(`Bearer ${token}`), {})
+
+    expect(handlerFn).toHaveBeenCalledOnce()
+    const [, , user] = handlerFn.mock.calls[0]
+    expect(user.role).toBe('admin')
   })
 })
