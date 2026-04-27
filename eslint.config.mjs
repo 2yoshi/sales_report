@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url'
 import { FlatCompat } from '@eslint/eslintrc'
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
+import prettier from 'eslint-config-prettier'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -44,6 +45,9 @@ export default tseslint.config(
   },
 
   {
-    ignore: ['.next/**', 'node_modules/**', 'dist/**'],
+    ignores: ['.next/**', 'node_modules/**', 'dist/**'],
   },
+
+  // Prettier と競合するルールを無効化（必ず最後に配置）
+  prettier,
 )
