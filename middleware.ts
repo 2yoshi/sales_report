@@ -1,46 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth/jwt'
-import { isBlacklisted } from '@/lib/auth/blacklist'
+import { extractBearerAuth } from '@/lib/auth/guard'
 
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl
 
-  // Skip authentication for login endpoint
-  if (pathname.startsWith('/auth/login')) {
+  // Skip authentication for the login endpoint.
+  // API routes are mounted under /api/, so the login path is /api/auth/login.
+  if (pathname.startsWith('/api/auth/login')) {
     return NextResponse.next()
   }
 
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const result = extractBearerAuth(request.headers.get('authorization'))
+  if (!result.ok) {
     return NextResponse.json(
-      { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } },
+      { error: { code: result.code, message: result.message } },
       { status: 401 },
     )
   }
 
-  const token = authHeader.slice(7)
-
-  let user
-  try {
-    user = verifyToken(token)
-  } catch {
-    return NextResponse.json(
-      { error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } },
-      { status: 401 },
-    )
-  }
-
-  if (isBlacklisted(token)) {
-    return NextResponse.json(
-      { error: { code: 'UNAUTHORIZED', message: 'Token has been invalidated' } },
-      { status: 401 },
-    )
-  }
-
-  const response = NextResponse.next()
-  response.headers.set('x-user-id', user.id)
-  response.headers.set('x-user-role', user.role)
-  return response
+  // Forward verified user info to route handlers via request headers.
+  // Use NextResponse.next({ request }) so the modified headers are visible
+  // to downstream route handlers, not just the HTTP response.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-user-id', result.user.id)
+  requestHeaders.set('x-user-role', result.user.role)
+  return NextResponse.next({ request: { headers: requestHeaders } })
 }
 
 export const config = {
