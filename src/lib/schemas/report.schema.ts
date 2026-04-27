@@ -57,10 +57,18 @@ export const listReportsQuerySchema = z.object({
   date_from: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_fromはYYYY-MM-DD形式で入力してください')
+    .refine((val) => {
+      const date = new Date(val)
+      return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === val
+    }, 'date_fromに存在しない日付は指定できません')
     .optional(),
   date_to: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_toはYYYY-MM-DD形式で入力してください')
+    .refine((val) => {
+      const date = new Date(val)
+      return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === val
+    }, 'date_toに存在しない日付は指定できません')
     .optional(),
   page: z
     .string()

@@ -151,7 +151,7 @@ describe('GET /api/reports', () => {
       expect(body.meta.per_page).toBe(20)
     })
 
-    it('salesユーザーがuser_idクエリを指定しても、サービス呼び出しには本人IDが使われる', async () => {
+    it('salesユーザーがuser_idクエリを指定しても、クエリはそのままサービスに転送される（スコープ制限はサービス層で行う）', async () => {
       mockListReports.mockResolvedValueOnce(emptyResult)
 
       // sales user passes another user's id — should be overridden in service layer

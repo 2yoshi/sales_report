@@ -63,7 +63,7 @@ export async function listReports(
       where.reportDate.gte = new Date(date_from)
     }
     if (date_to) {
-      // Include the full day of date_to
+      // reportDate is @db.Date (date-only), so lte comparison works at date level
       where.reportDate.lte = new Date(date_to)
     }
   }
