@@ -33,6 +33,8 @@ describe('loginUser', () => {
         email: 'yamada@test.com',
         role: 'sales',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       const result = await loginUser({ email: 'yamada@test.com', password: 'Test1234!' })
@@ -54,6 +56,8 @@ describe('loginUser', () => {
         email: 'tanaka@test.com',
         role: 'manager',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       const result = await loginUser({ email: 'tanaka@test.com', password: 'Test1234!' })
@@ -70,6 +74,8 @@ describe('loginUser', () => {
         email: 'admin@test.com',
         role: 'admin',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       const result = await loginUser({ email: 'admin@test.com', password: 'Test1234!' })
@@ -85,6 +91,8 @@ describe('loginUser', () => {
         email: 'yamada@test.com',
         role: 'sales',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       const result = await loginUser({ email: 'yamada@test.com', password: 'Test1234!' })
@@ -103,6 +111,8 @@ describe('loginUser', () => {
         email: 'yamada@test.com',
         role: 'sales',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       const result = await loginUser({ email: 'yamada@test.com', password: 'Test1234!' })
@@ -123,6 +133,8 @@ describe('loginUser', () => {
         email: 'yamada@test.com',
         role: 'sales',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       const err = await loginUser({ email: 'yamada@test.com', password: 'WrongPassword!' }).catch(
@@ -165,6 +177,8 @@ describe('loginUser', () => {
         email: 'yamada@test.com',
         role: 'sales',
         passwordHash,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       })
 
       let wrongPasswordError: AppError | null = null

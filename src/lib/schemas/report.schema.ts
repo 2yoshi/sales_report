@@ -49,5 +49,45 @@ export const createReportSchema = reportBaseSchema.extend({
 
 export const updateReportSchema = reportBaseSchema
 
+export const listReportsQuerySchema = z.object({
+  user_id: z
+    .string()
+    .uuid('user_idはUUID形式で入力してください')
+    .optional(),
+  date_from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_fromはYYYY-MM-DD形式で入力してください')
+    .refine((val) => {
+      const date = new Date(val)
+      return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === val
+    }, 'date_fromに存在しない日付は指定できません')
+    .optional(),
+  date_to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'date_toはYYYY-MM-DD形式で入力してください')
+    .refine((val) => {
+      const date = new Date(val)
+      return !isNaN(date.getTime()) && date.toISOString().slice(0, 10) === val
+    }, 'date_toに存在しない日付は指定できません')
+    .optional(),
+  page: z
+    .string()
+    .optional()
+    .transform((val) => (val !== undefined ? parseInt(val, 10) : 1))
+    .pipe(z.number().int().min(1, 'pageは1以上の整数で入力してください')),
+  per_page: z
+    .string()
+    .optional()
+    .transform((val) => (val !== undefined ? parseInt(val, 10) : 20))
+    .pipe(
+      z
+        .number()
+        .int()
+        .min(1, 'per_pageは1以上の整数で入力してください')
+        .max(100, 'per_pageは100以下の整数で入力してください'),
+    ),
+})
+
 export type CreateReportInput = z.infer<typeof createReportSchema>
 export type UpdateReportInput = z.infer<typeof updateReportSchema>
+export type ListReportsQuery = z.infer<typeof listReportsQuerySchema>
