@@ -1,10 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { addToBlacklist, isBlacklisted } from './blacklist'
+import { addToBlacklist, isBlacklisted, clearBlacklist } from './blacklist'
 
-// Reset the module between tests to get a fresh blacklist Set
-beforeEach(async () => {
-  // Re-import fresh module to reset the in-memory Set state
-  // Since vitest clears mocks but not module state, we need to reset manually via the module
+beforeEach(() => {
+  clearBlacklist()
 })
 
 describe('isBlacklisted', () => {

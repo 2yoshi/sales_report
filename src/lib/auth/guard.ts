@@ -23,11 +23,17 @@ export function requireRole(roles: UserRole[]): (user: AuthUser) => void {
 }
 
 type RouteHandler = (
-  req: NextRequest & { user?: AuthUser },
+  req: NextRequest,
+  context: Record<string, unknown>,
+  user: AuthUser,
+) => Promise<NextResponse>
+
+type UnauthRouteHandler = (
+  req: NextRequest,
   context: Record<string, unknown>,
 ) => Promise<NextResponse>
 
-export function withAuth(handler: RouteHandler, roles?: UserRole[]): RouteHandler {
+export function withAuth(handler: RouteHandler, roles?: UserRole[]): UnauthRouteHandler {
   return async (req, context) => {
     const authHeader = req.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -71,7 +77,6 @@ export function withAuth(handler: RouteHandler, roles?: UserRole[]): RouteHandle
       }
     }
 
-    ;(req as NextRequest & { user: AuthUser }).user = user
-    return handler(req, context)
+    return handler(req, context, user)
   }
 }

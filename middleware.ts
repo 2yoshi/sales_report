@@ -6,7 +6,7 @@ export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl
 
   // Skip authentication for login endpoint
-  if (pathname === '/auth/login' || pathname.startsWith('/auth/login')) {
+  if (pathname.startsWith('/auth/login')) {
     return NextResponse.next()
   }
 
@@ -20,8 +20,9 @@ export function middleware(request: NextRequest): NextResponse {
 
   const token = authHeader.slice(7)
 
+  let user
   try {
-    verifyToken(token)
+    user = verifyToken(token)
   } catch {
     return NextResponse.json(
       { error: { code: 'UNAUTHORIZED', message: 'Invalid or expired token' } },
@@ -36,7 +37,10 @@ export function middleware(request: NextRequest): NextResponse {
     )
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+  response.headers.set('x-user-id', user.id)
+  response.headers.set('x-user-role', user.role)
+  return response
 }
 
 export const config = {

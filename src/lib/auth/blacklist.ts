@@ -7,3 +7,7 @@ export function addToBlacklist(token: string): void {
 export function isBlacklisted(token: string): boolean {
   return blacklistedTokens.has(token)
 }
+
+export function clearBlacklist(): void {
+  blacklistedTokens.clear()
+}
