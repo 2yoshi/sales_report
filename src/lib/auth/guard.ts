@@ -2,22 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { AuthUser, UserRole } from '@/types'
 import { verifyToken } from './jwt'
 import { isBlacklisted } from './blacklist'
-
-export class ApiError extends Error {
-  constructor(
-    public readonly statusCode: number,
-    public readonly code: string,
-    message: string,
-  ) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
+import { AppError } from '@/lib/errors/AppError'
 
 export function requireRole(roles: UserRole[]): (user: AuthUser) => void {
   return (user: AuthUser) => {
     if (!roles.includes(user.role)) {
-      throw new ApiError(403, 'FORBIDDEN', 'Insufficient permissions')
+      throw AppError.forbidden()
     }
   }
 }
@@ -75,7 +65,7 @@ export function withAuth(handler: AuthedRouteHandler, roles?: UserRole[]): Wrapp
       try {
         checkRole(user)
       } catch (err) {
-        if (err instanceof ApiError) {
+        if (err instanceof AppError) {
           return NextResponse.json(
             { error: { code: err.code, message: err.message } },
             { status: err.statusCode },

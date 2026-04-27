@@ -1,9 +1,18 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { requireRole, ApiError, extractBearerAuth } from './guard'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { requireRole, extractBearerAuth } from './guard'
+import { AppError } from '@/lib/errors/AppError'
 import { generateToken } from './jwt'
-import { addToBlacklist, clearBlacklist } from './blacklist'
 import jwt from 'jsonwebtoken'
 import type { AuthUser } from '@/types'
+
+// blacklist モジュールをモック化してテスト間の状態汚染を防ぐ
+// clearBlacklist() は公開 API ではないため、vi.mock で制御する
+const blacklistedSet = new Set<string>()
+
+vi.mock('./blacklist', () => ({
+  addToBlacklist: (token: string) => blacklistedSet.add(token),
+  isBlacklisted: (token: string) => blacklistedSet.has(token),
+}))
 
 const salesUser: AuthUser = {
   id: 'user-001',
@@ -27,7 +36,7 @@ const adminUser: AuthUser = {
 }
 
 beforeEach(() => {
-  clearBlacklist()
+  blacklistedSet.clear()
 })
 
 describe('requireRole', () => {
@@ -52,31 +61,31 @@ describe('requireRole', () => {
     expect(() => checkRole(adminUser)).not.toThrow()
   })
 
-  it('throws ApiError with status 403 when role does not match', () => {
+  it('throws AppError with status 403 when role does not match', () => {
     const checkRole = requireRole(['admin'])
-    expect(() => checkRole(salesUser)).toThrow(ApiError)
+    expect(() => checkRole(salesUser)).toThrow(AppError)
   })
 
-  it('throws ApiError with code FORBIDDEN when sales tries manager-only action', () => {
+  it('throws AppError with code FORBIDDEN when sales tries manager-only action', () => {
     const checkRole = requireRole(['manager', 'admin'])
-    let thrownError: ApiError | null = null
+    let thrownError: AppError | null = null
     try {
       checkRole(salesUser)
     } catch (err) {
-      thrownError = err as ApiError
+      thrownError = err as AppError
     }
     expect(thrownError).not.toBeNull()
     expect(thrownError!.statusCode).toBe(403)
     expect(thrownError!.code).toBe('FORBIDDEN')
   })
 
-  it('throws ApiError with status 403 when manager tries admin-only action', () => {
+  it('throws AppError with status 403 when manager tries admin-only action', () => {
     const checkRole = requireRole(['admin'])
-    let thrownError: ApiError | null = null
+    let thrownError: AppError | null = null
     try {
       checkRole(managerUser)
     } catch (err) {
-      thrownError = err as ApiError
+      thrownError = err as AppError
     }
     expect(thrownError).not.toBeNull()
     expect(thrownError!.statusCode).toBe(403)
@@ -86,9 +95,9 @@ describe('requireRole', () => {
   it('throws when empty roles array is provided and any user tries to access', () => {
     // Empty roles list means no one is allowed
     const checkRole = requireRole([])
-    expect(() => checkRole(adminUser)).toThrow(ApiError)
-    expect(() => checkRole(managerUser)).toThrow(ApiError)
-    expect(() => checkRole(salesUser)).toThrow(ApiError)
+    expect(() => checkRole(adminUser)).toThrow(AppError)
+    expect(() => checkRole(managerUser)).toThrow(AppError)
+    expect(() => checkRole(salesUser)).toThrow(AppError)
   })
 })
 
@@ -133,7 +142,7 @@ describe('extractBearerAuth', () => {
 
   it('returns ok:false for a blacklisted token', () => {
     const token = generateToken(salesUser)
-    addToBlacklist(token)
+    blacklistedSet.add(token)
     const result = extractBearerAuth(`Bearer ${token}`)
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -164,8 +173,8 @@ describe('extractBearerAuth', () => {
     }
   })
 
-  it('treats a previously blacklisted token as invalid even after clearBlacklist is called in another test', () => {
-    // Verifies that beforeEach(clearBlacklist) prevents cross-test contamination
+  it('blacklisted token in one test does not affect subsequent tests due to beforeEach reset', () => {
+    // Verifies that beforeEach(blacklistedSet.clear()) prevents cross-test contamination
     const token = generateToken(managerUser)
     // Not blacklisted in this test — should pass
     const result = extractBearerAuth(`Bearer ${token}`)
