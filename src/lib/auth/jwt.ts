@@ -6,6 +6,7 @@ if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
 }
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-in-production'
 const EXPIRES_IN = '24h'
+export const AUTH_TOKEN_EXPIRES_SECONDS = 86400 // 24 hours — must match EXPIRES_IN
 
 export function generateToken(payload: AuthUser): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: EXPIRES_IN })
