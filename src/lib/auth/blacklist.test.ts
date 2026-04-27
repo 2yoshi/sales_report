@@ -1,8 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { addToBlacklist, isBlacklisted, clearBlacklist } from './blacklist'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-beforeEach(() => {
-  clearBlacklist()
+// clearBlacklist() は公開 API ではないため、各テスト前にモジュールを再ロードして
+// インメモリ Set をリセットする。これにより テスト間の状態汚染を防ぐ。
+let addToBlacklist: (token: string) => void
+let isBlacklisted: (token: string) => boolean
+
+beforeEach(async () => {
+  vi.resetModules()
+  const mod = await import('./blacklist')
+  addToBlacklist = mod.addToBlacklist
+  isBlacklisted = mod.isBlacklisted
 })
 
 describe('isBlacklisted', () => {

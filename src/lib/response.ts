@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server'
 
 /**
- * Wraps a single resource in the standard `{ data }` envelope.
+ * Wraps a single resource in the standard `{ data }` envelope with HTTP 200.
  */
-export function ok<T>(data: T, status = 200): NextResponse {
-  return NextResponse.json({ data }, { status })
+export function ok<T>(data: T): NextResponse {
+  return NextResponse.json({ data })
 }
 
 /**
@@ -21,7 +21,7 @@ export function okList<T>(
  * Returns a 201 Created response with the created resource wrapped in `{ data }`.
  */
 export function created<T>(data: T): NextResponse {
-  return ok(data, 201)
+  return NextResponse.json({ data }, { status: 201 })
 }
 
 /**

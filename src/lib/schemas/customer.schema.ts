@@ -17,7 +17,8 @@ const customerBaseSchema = z.object({
     .string()
     .email('メール形式で入力してください')
     .optional()
-    .or(z.literal('')),
+    .or(z.literal(''))
+    .transform((val) => (val === '' ? undefined : val)),
 })
 
 export const createCustomerSchema = customerBaseSchema

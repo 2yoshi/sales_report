@@ -10,11 +10,3 @@ export function addToBlacklist(token: string): void {
 export function isBlacklisted(token: string): boolean {
   return blacklistedTokens.has(token)
 }
-
-/**
- * Clears all blacklisted tokens.
- * @internal FOR TESTING ONLY — do not call this in production code.
- */
-export function clearBlacklist(): void {
-  blacklistedTokens.clear()
-}

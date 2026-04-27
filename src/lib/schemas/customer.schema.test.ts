@@ -102,4 +102,33 @@ describe('updateCustomerSchema', () => {
     const result = updateCustomerSchema.safeParse({ name: '伊藤 恵子' })
     expect(result.success).toBe(true)
   })
+
+  it('name が空の場合はエラーになる', () => {
+    const result = updateCustomerSchema.safeParse({ name: '' })
+    expect(result.success).toBe(false)
+    if (result.success) return
+    const issue = result.error.issues.find((i) => i.path[0] === 'name')
+    expect(issue?.message).toBe('顧客名は必須です')
+  })
+
+  it('email が不正な形式の場合はエラーになる', () => {
+    const result = updateCustomerSchema.safeParse({
+      name: '伊藤 恵子',
+      email: 'invalid-email',
+    })
+    expect(result.success).toBe(false)
+    if (result.success) return
+    const issue = result.error.issues.find((i) => i.path[0] === 'email')
+    expect(issue?.message).toBe('メール形式で入力してください')
+  })
+
+  it('email が空文字の場合は undefined に変換される', () => {
+    const result = updateCustomerSchema.safeParse({
+      name: '伊藤 恵子',
+      email: '',
+    })
+    expect(result.success).toBe(true)
+    if (!result.success) return
+    expect(result.data.email).toBeUndefined()
+  })
 })

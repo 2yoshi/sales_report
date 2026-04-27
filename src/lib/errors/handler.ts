@@ -38,16 +38,22 @@ export function handleError(err: unknown): NextResponse {
 
   if (err instanceof ZodError) {
     const appError = formatZodError(err)
-    return NextResponse.json(
-      {
-        error: {
-          code: appError.code,
-          message: appError.message,
-          details: appError.details,
-        },
+    const body: {
+      error: {
+        code: string
+        message: string
+        details?: { field: string; message: string }[]
+      }
+    } = {
+      error: {
+        code: appError.code,
+        message: appError.message,
       },
-      { status: appError.statusCode },
-    )
+    }
+    if (appError.details && appError.details.length > 0) {
+      body.error.details = appError.details
+    }
+    return NextResponse.json(body, { status: appError.statusCode })
   }
 
   // Unexpected errors — do not leak internal details in production

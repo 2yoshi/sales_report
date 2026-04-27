@@ -12,11 +12,6 @@ describe('ok', () => {
     const body = await jsonBody(res)
     expect(body).toEqual({ data: { id: '1', name: 'test' } })
   })
-
-  it('カスタムステータスコードを受け取れる', async () => {
-    const res = ok({ message: 'ok' }, 202)
-    expect(res.status).toBe(202)
-  })
 })
 
 describe('okList', () => {

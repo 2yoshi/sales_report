@@ -71,6 +71,25 @@ describe('createReportSchema', () => {
       const result = createReportSchema.safeParse(rest)
       expect(result.success).toBe(false)
     })
+
+    it('存在しない日付（2026-02-30）はエラーになる', () => {
+      const result = createReportSchema.safeParse({
+        ...validCreateInput,
+        report_date: '2026-02-30',
+      })
+      expect(result.success).toBe(false)
+      if (result.success) return
+      const issue = result.error.issues.find((i) => i.path[0] === 'report_date')
+      expect(issue?.message).toBe('対象日に存在しない日付は指定できません')
+    })
+
+    it('存在しない日付（2026-13-01）はエラーになる', () => {
+      const result = createReportSchema.safeParse({
+        ...validCreateInput,
+        report_date: '2026-13-01',
+      })
+      expect(result.success).toBe(false)
+    })
   })
 
   describe('problem フィールド', () => {
