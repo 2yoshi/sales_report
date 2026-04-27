@@ -1,9 +1,13 @@
 import bcrypt from 'bcryptjs'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
-import { generateToken } from './jwt'
+import { generateToken, AUTH_TOKEN_EXPIRES_SECONDS } from './jwt'
 import type { LoginInput } from '@/lib/schemas/auth.schema'
 import type { UserRole } from '@/types'
+
+// Pre-computed dummy hash used only to ensure constant-time execution when
+// the email does not exist, preventing user enumeration via timing attacks.
+const DUMMY_HASH = '$2a$10$FixedDummyHashForTimingAttack.PreventUserEnumeration00'
 
 export interface LoginResult {
   access_token: string
@@ -35,6 +39,9 @@ export async function loginUser(input: LoginInput): Promise<LoginResult> {
   })
 
   if (!user) {
+    // Always run bcrypt to make response time uniform regardless of whether
+    // the email exists, preventing user enumeration via timing analysis.
+    await bcrypt.compare(input.password, DUMMY_HASH)
     throw AppError.invalidCredentials()
   }
 
@@ -55,7 +62,7 @@ export async function loginUser(input: LoginInput): Promise<LoginResult> {
   return {
     access_token: token,
     token_type: 'Bearer',
-    expires_in: 86400,
+    expires_in: AUTH_TOKEN_EXPIRES_SECONDS,
     user: authUser,
   }
 }

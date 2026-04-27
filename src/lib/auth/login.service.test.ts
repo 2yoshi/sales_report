@@ -125,18 +125,13 @@ describe('loginUser', () => {
         passwordHash,
       })
 
-      await expect(
-        loginUser({ email: 'yamada@test.com', password: 'WrongPassword!' }),
-      ).rejects.toThrow(AppError)
+      const err = await loginUser({ email: 'yamada@test.com', password: 'WrongPassword!' }).catch(
+        (e) => e,
+      )
 
-      try {
-        await loginUser({ email: 'yamada@test.com', password: 'WrongPassword!' })
-      } catch (err) {
-        expect(err).toBeInstanceOf(AppError)
-        const appErr = err as AppError
-        expect(appErr.code).toBe('INVALID_CREDENTIALS')
-        expect(appErr.statusCode).toBe(401)
-      }
+      expect(err).toBeInstanceOf(AppError)
+      expect(err.code).toBe('INVALID_CREDENTIALS')
+      expect(err.statusCode).toBe(401)
     })
   })
 
@@ -144,18 +139,13 @@ describe('loginUser', () => {
     it('メールアドレスが存在しない場合はINVALID_CREDENTIALSエラーを投げる', async () => {
       mockFindUnique.mockResolvedValueOnce(null)
 
-      await expect(
-        loginUser({ email: 'nonexistent@test.com', password: 'Test1234!' }),
-      ).rejects.toThrow(AppError)
+      const err = await loginUser({ email: 'nonexistent@test.com', password: 'Test1234!' }).catch(
+        (e) => e,
+      )
 
-      try {
-        await loginUser({ email: 'nonexistent@test.com', password: 'Test1234!' })
-      } catch (err) {
-        expect(err).toBeInstanceOf(AppError)
-        const appErr = err as AppError
-        expect(appErr.code).toBe('INVALID_CREDENTIALS')
-        expect(appErr.statusCode).toBe(401)
-      }
+      expect(err).toBeInstanceOf(AppError)
+      expect(err.code).toBe('INVALID_CREDENTIALS')
+      expect(err.statusCode).toBe(401)
     })
 
     it('存在しないメールと誤ったパスワードで同じエラーコードを返す（情報漏洩防止）', async () => {

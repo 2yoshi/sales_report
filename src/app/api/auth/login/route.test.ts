@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server'
 import { POST } from './route'
 import * as loginService from '@/lib/auth/login.service'
 import { AppError } from '@/lib/errors/AppError'
+import { AUTH_TOKEN_EXPIRES_SECONDS } from '@/lib/auth/jwt'
 
 vi.mock('@/lib/auth/login.service', () => ({
   loginUser: vi.fn(),
@@ -21,7 +22,7 @@ function makeRequest(body: unknown): NextRequest {
 const mockLoginResult: loginService.LoginResult = {
   access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature',
   token_type: 'Bearer',
-  expires_in: 86400,
+  expires_in: AUTH_TOKEN_EXPIRES_SECONDS,
   user: {
     id: 'user-001',
     name: '山田 太郎',
@@ -47,7 +48,7 @@ describe('POST /api/auth/login', () => {
       expect(body.data).toBeDefined()
       expect(body.data.access_token).toBe(mockLoginResult.access_token)
       expect(body.data.token_type).toBe('Bearer')
-      expect(body.data.expires_in).toBe(86400)
+      expect(body.data.expires_in).toBe(AUTH_TOKEN_EXPIRES_SECONDS)
       expect(body.data.user.id).toBe('user-001')
       expect(body.data.user.name).toBe('山田 太郎')
       expect(body.data.user.email).toBe('yamada@test.com')
@@ -160,6 +161,21 @@ describe('POST /api/auth/login', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+  })
+
+  describe('不正なリクエストボディ → 400', () => {
+    it('JSONとして解析できないボディは400とVALIDATION_ERRORを返す', async () => {
+      const req = new NextRequest('http://localhost/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: 'this is not json',
       })
       const res = await POST(req)
       const body = await res.json()
