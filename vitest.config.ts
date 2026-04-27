@@ -12,7 +12,7 @@ export default defineConfig({
     globals: true,
 
     // 各テスト実行前のセットアップ
-    setupFiles: ['./tests/setup.ts'],
+    setupFiles: [path.resolve(__dirname, './tests/setup.ts')],
 
     // テスト対象ファイルパターン
     include: ['**/*.{test,spec}.{ts,tsx}'],
