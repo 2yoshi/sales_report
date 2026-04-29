@@ -248,23 +248,6 @@ export async function createReport(
   }
 }
 
-export async function deleteReport(user: AuthUser, reportId: string): Promise<void> {
-  const report = await prisma.dailyReport.findUnique({
-    where: { id: reportId },
-    select: { id: true, userId: true },
-  })
-
-  if (!report) {
-    throw AppError.notFound('日報')
-  }
-
-  if (report.userId !== user.id) {
-    throw AppError.forbidden()
-  }
-
-  await prisma.dailyReport.delete({ where: { id: reportId } })
-}
-
 export async function getReport(user: AuthUser, reportId: string): Promise<ReportDetail> {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
@@ -331,5 +314,30 @@ export async function getReport(user: AuthUser, reportId: string): Promise<Repor
     })),
     created_at: report.createdAt.toISOString(),
     updated_at: report.updatedAt.toISOString(),
+  }
+}
+
+export async function deleteReport(user: AuthUser, reportId: string): Promise<void> {
+  const report = await prisma.dailyReport.findUnique({
+    where: { id: reportId },
+    select: { userId: true },
+  })
+
+  if (!report) {
+    throw AppError.notFound('日報')
+  }
+
+  if (report.userId !== user.id) {
+    throw AppError.forbidden()
+  }
+
+  try {
+    await prisma.dailyReport.delete({ where: { id: reportId } })
+  } catch (err) {
+    // Race condition: another request deleted the same report between our check and delete
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      throw AppError.notFound('日報')
+    }
+    throw err
   }
 }

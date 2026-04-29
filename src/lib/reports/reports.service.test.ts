@@ -825,10 +825,9 @@ describe('deleteReport', () => {
       expect(mockDelete).toHaveBeenCalledWith({ where: { id: reportId } })
     })
 
-    it('findUniqueはidとuserIdのみselectする', async () => {
+    it('findUniqueはuserIdのみselectする', async () => {
       const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
       mockFindUnique.mockResolvedValueOnce({
-        id: reportId,
         userId: salesUser.id,
       } as never)
       mockDelete.mockResolvedValueOnce({} as never)
@@ -837,8 +836,44 @@ describe('deleteReport', () => {
 
       expect(mockFindUnique).toHaveBeenCalledWith({
         where: { id: reportId },
-        select: { id: true, userId: true },
+        select: { userId: true },
       })
+    })
+  })
+
+  // ── 競合状態（P2025）────────────────────────────────────────────────────
+
+  describe('競合状態', () => {
+    it('P2025（findUnique後に別リクエストが削除済み）の場合はNOT_FOUNDをスローする', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        userId: salesUser.id,
+      } as never)
+      const p2025 = new Prisma.PrismaClientKnownRequestError('Record to delete does not exist.', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      })
+      mockDelete.mockRejectedValueOnce(p2025)
+
+      await expect(deleteReport(salesUser, reportId)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
+    })
+
+    it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        userId: salesUser.id,
+      } as never)
+      const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      })
+      mockDelete.mockRejectedValueOnce(p2002)
+
+      await expect(deleteReport(salesUser, reportId)).rejects.toBeInstanceOf(
+        Prisma.PrismaClientKnownRequestError,
+      )
     })
   })
 })
