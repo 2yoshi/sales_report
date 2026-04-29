@@ -418,6 +418,57 @@ export async function getReport(user: AuthUser, reportId: string): Promise<Repor
   }
 }
 
+export interface VisitRecordItem {
+  id: string
+  customer: {
+    id: string
+    name: string
+    company: string | null
+  }
+  content: string
+  sort_order: number
+}
+
+export async function getVisitRecords(
+  user: AuthUser,
+  reportId: string,
+): Promise<VisitRecordItem[]> {
+  const report = await prisma.dailyReport.findUnique({
+    where: { id: reportId },
+    select: {
+      userId: true,
+      visitRecords: {
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          customer: {
+            select: { id: true, name: true, company: true },
+          },
+        },
+      },
+    },
+  })
+
+  if (!report) {
+    throw AppError.notFound('日報')
+  }
+
+  // sales role can only view their own reports
+  if (user.role === 'sales' && report.userId !== user.id) {
+    throw AppError.forbidden()
+  }
+
+  return report.visitRecords.map((vr) => ({
+    id: vr.id,
+    customer: {
+      id: vr.customer.id,
+      name: vr.customer.name,
+      company: vr.customer.company,
+    },
+    content: vr.content,
+    sort_order: vr.sortOrder,
+  }))
+}
+
 export async function deleteReport(user: AuthUser, reportId: string): Promise<void> {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
