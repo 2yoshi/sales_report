@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser, UserRole } from '@/types'
-import type { ListReportsQuery, CreateReportInput } from '@/lib/schemas/report.schema'
+import type { ListReportsQuery, CreateReportInput, UpdateReportInput } from '@/lib/schemas/report.schema'
 
 export interface ReportListItem {
   id: string
@@ -243,6 +243,107 @@ export async function createReport(
       sort_order: vr.sortOrder,
     })),
     comments_count: report._count.comments,
+    created_at: report.createdAt.toISOString(),
+    updated_at: report.updatedAt.toISOString(),
+  }
+}
+
+export async function updateReport(
+  user: AuthUser,
+  reportId: string,
+  input: UpdateReportInput,
+): Promise<ReportDetail> {
+  const existing = await prisma.dailyReport.findUnique({
+    where: { id: reportId },
+    select: { userId: true },
+  })
+
+  if (!existing) {
+    throw AppError.notFound('日報')
+  }
+
+  if (existing.userId !== user.id) {
+    throw AppError.forbidden()
+  }
+
+  let report
+  try {
+    report = await prisma.$transaction(async (tx) => {
+      await tx.visitRecord.deleteMany({ where: { dailyReportId: reportId } })
+
+      return tx.dailyReport.update({
+        where: { id: reportId },
+        data: {
+          problem: input.problem,
+          plan: input.plan,
+          visitRecords: {
+            create: input.visit_records.map((vr) => ({
+              customerId: vr.customer_id,
+              content: vr.content,
+              sortOrder: vr.sort_order,
+            })),
+          },
+        },
+        include: {
+          user: {
+            select: { id: true, name: true, role: true },
+          },
+          visitRecords: {
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              customer: {
+                select: { id: true, name: true, company: true },
+              },
+            },
+          },
+          comments: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              commenter: {
+                select: { id: true, name: true },
+              },
+            },
+          },
+        },
+      })
+    })
+  } catch (err) {
+    // Race condition: report was deleted between the ownership check and the update
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      throw AppError.notFound('日報')
+    }
+    throw err
+  }
+
+  return {
+    id: report.id,
+    report_date: report.reportDate.toISOString().slice(0, 10),
+    problem: report.problem,
+    plan: report.plan,
+    user: {
+      id: report.user.id,
+      name: report.user.name,
+      role: report.user.role,
+    },
+    visit_records: report.visitRecords.map((vr) => ({
+      id: vr.id,
+      customer: {
+        id: vr.customer.id,
+        name: vr.customer.name,
+        company: vr.customer.company,
+      },
+      content: vr.content,
+      sort_order: vr.sortOrder,
+    })),
+    comments: report.comments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      commenter: {
+        id: c.commenter.id,
+        name: c.commenter.name,
+      },
+      created_at: c.createdAt.toISOString(),
+    })),
     created_at: report.createdAt.toISOString(),
     updated_at: report.updatedAt.toISOString(),
   }

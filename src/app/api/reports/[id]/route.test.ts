@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { GET, DELETE } from './route'
+import { GET, PUT, DELETE } from './route'
 import * as reportsService from '@/lib/reports/reports.service'
 import { generateToken } from '@/lib/auth/jwt'
 import { AppError } from '@/lib/errors/AppError'
@@ -10,6 +10,7 @@ import type { ReportDetail } from '@/lib/reports/reports.service'
 vi.mock('@/lib/reports/reports.service', () => ({
   listReports: vi.fn(),
   getReport: vi.fn(),
+  updateReport: vi.fn(),
   deleteReport: vi.fn(),
 }))
 
@@ -19,6 +20,7 @@ vi.mock('@/lib/auth/blacklist', () => ({
 }))
 
 const mockGetReport = vi.mocked(reportsService.getReport)
+const mockUpdateReport = vi.mocked(reportsService.updateReport)
 const mockDeleteReport = vi.mocked(reportsService.deleteReport)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
@@ -126,6 +128,54 @@ function makeDeleteRequestWithoutAuth(reportId = REPORT_ID): NextRequest {
 
 function makeContext(reportId = REPORT_ID): Record<string, unknown> {
   return { params: { id: reportId } }
+}
+
+// ─── PUT helpers ──────────────────────────────────────────────────────────────
+
+const validUpdateBody = {
+  problem: '更新後課題',
+  plan: '更新後予定',
+  visit_records: [
+    {
+      customer_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      content: '更新後訪問内容',
+      sort_order: 1,
+    },
+  ],
+}
+
+function makePutRequest(
+  user: AuthUser,
+  body: unknown = validUpdateBody,
+  reportId = REPORT_ID,
+): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+}
+
+function makePutRequestWithoutAuth(reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(validUpdateBody),
+  })
+}
+
+function makePutRequestWithInvalidJson(user: AuthUser, reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: 'not-valid-json{',
+  })
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -383,6 +433,157 @@ describe('GET /api/reports/:id', () => {
 
       const req = makeRequest(salesUser)
       const res = await GET(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(500)
+      expect(body.error.code).toBe('INTERNAL_SERVER_ERROR')
+    })
+  })
+})
+
+// ─── PUT /api/reports/:id ──────────────────────────────────────────────────────
+
+describe('PUT /api/reports/:id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── 認証 ──────────────────────────────────────────────────────────────────
+
+  describe('認証', () => {
+    it('Authorizationヘッダーがない場合は401を返す', async () => {
+      const req = makePutRequestWithoutAuth()
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(401)
+      expect(body.error.code).toBe('UNAUTHORIZED')
+      expect(mockUpdateReport).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── API-019: 作成者が更新 → 200 ────────────────────────────────────────
+
+  describe('API-019: 作成者が自分の日報を更新すると200と更新後の日報を返す', () => {
+    it('200と更新後のReportDetailを返す', async () => {
+      const updatedReport: ReportDetail = {
+        ...sampleReportDetail,
+        problem: '更新後課題',
+        plan: '更新後予定',
+        visit_records: [
+          {
+            id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+            customer: {
+              id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+              name: '佐藤 健',
+              company: '株式会社A',
+            },
+            content: '更新後訪問内容',
+            sort_order: 1,
+          },
+        ],
+      }
+      mockUpdateReport.mockResolvedValueOnce(updatedReport)
+
+      const req = makePutRequest(salesUser)
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.problem).toBe('更新後課題')
+      expect(body.data.plan).toBe('更新後予定')
+      expect(body.data.visit_records[0].content).toBe('更新後訪問内容')
+      expect(mockUpdateReport).toHaveBeenCalledWith(salesUser, REPORT_ID, validUpdateBody)
+    })
+  })
+
+  // ── API-020: 作成者以外が更新 → 403 FORBIDDEN ────────────────────────────
+
+  describe('API-020: 作成者以外のsalesユーザーが更新しようとすると403を返す', () => {
+    it('403とFORBIDDENコードを返す', async () => {
+      mockUpdateReport.mockRejectedValueOnce(AppError.forbidden())
+
+      const req = makePutRequest(salesUser2)
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+    })
+  })
+
+  // ── UUID形式でないIDを指定 → 404 ─────────────────────────────────────────
+
+  describe('UUID形式でないIDを指定すると404を返す', () => {
+    it('404とNOT_FOUNDコードを返し、サービスは呼ばれない', async () => {
+      const req = makePutRequest(salesUser, validUpdateBody, 'not-a-uuid')
+      const res = await PUT(req, makeContext('not-a-uuid'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+      expect(mockUpdateReport).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── 存在しない日報ID → 404 ────────────────────────────────────────────────
+
+  describe('存在しない日報IDを指定すると404を返す', () => {
+    it('サービスがNOT_FOUNDをスローした場合に404を返す', async () => {
+      mockUpdateReport.mockRejectedValueOnce(AppError.notFound('日報'))
+
+      const req = makePutRequest(salesUser, validUpdateBody, 'ffffffff-ffff-ffff-ffff-ffffffffffff')
+      const res = await PUT(req, makeContext('ffffffff-ffff-ffff-ffff-ffffffffffff'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+    })
+  })
+
+  // ── バリデーションエラー → 400 ───────────────────────────────────────────
+
+  describe('バリデーションエラー', () => {
+    it('visit_recordsが空配列の場合は400とVALIDATION_ERRORを返す', async () => {
+      const req = makePutRequest(salesUser, { ...validUpdateBody, visit_records: [] })
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockUpdateReport).not.toHaveBeenCalled()
+    })
+
+    it('problemが欠けている場合は400とVALIDATION_ERRORを返す', async () => {
+      const { problem: _omit, ...bodyWithoutProblem } = validUpdateBody
+      const req = makePutRequest(salesUser, bodyWithoutProblem)
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockUpdateReport).not.toHaveBeenCalled()
+    })
+
+    it('不正なJSONボディの場合は400とVALIDATION_ERRORを返す', async () => {
+      const req = makePutRequestWithInvalidJson(salesUser)
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockUpdateReport).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── 予期しないエラー → 500 ───────────────────────────────────────────────
+
+  describe('エラーハンドリング', () => {
+    it('サービスが予期しないエラーを投げた場合は500を返す', async () => {
+      mockUpdateReport.mockRejectedValueOnce(new Error('Database connection failed'))
+
+      const req = makePutRequest(salesUser)
+      const res = await PUT(req, makeContext())
       const body = await res.json()
 
       expect(res.status).toBe(500)

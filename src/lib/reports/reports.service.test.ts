@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listReports, getReport, createReport, deleteReport } from './reports.service'
+import { listReports, getReport, createReport, updateReport, deleteReport } from './reports.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import { Prisma } from '@prisma/client'
@@ -7,12 +7,17 @@ import type { AuthUser } from '@/types'
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: vi.fn(),
     dailyReport: {
       count: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
+      update: vi.fn(),
       delete: vi.fn(),
+    },
+    visitRecord: {
+      deleteMany: vi.fn(),
     },
   },
 }))
@@ -21,7 +26,10 @@ const mockCount = vi.mocked(prisma.dailyReport.count)
 const mockFindMany = vi.mocked(prisma.dailyReport.findMany)
 const mockFindUnique = vi.mocked(prisma.dailyReport.findUnique)
 const mockCreate = vi.mocked(prisma.dailyReport.create)
+const mockUpdate = vi.mocked(prisma.dailyReport.update)
 const mockDelete = vi.mocked(prisma.dailyReport.delete)
+const mockDeleteMany = vi.mocked(prisma.visitRecord.deleteMany)
+const mockTransaction = vi.mocked(prisma.$transaction)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -714,6 +722,179 @@ describe('getReport', () => {
           }),
         }),
       )
+    })
+  })
+})
+
+// ─── updateReport ─────────────────────────────────────────────────────────────
+
+const updateInput = {
+  problem: '更新後課題',
+  plan: '更新後予定',
+  visit_records: [
+    {
+      customer_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      content: '更新後訪問内容',
+      sort_order: 1,
+    },
+  ],
+}
+
+function makePrismaUpdatedReport() {
+  return {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    userId: salesUser.id,
+    reportDate: new Date('2026-04-19'),
+    problem: '更新後課題',
+    plan: '更新後予定',
+    createdAt: new Date('2026-04-19T09:00:00.000Z'),
+    updatedAt: new Date('2026-04-19T12:00:00.000Z'),
+    user: { id: salesUser.id, name: salesUser.name, role: 'sales' as const },
+    visitRecords: [
+      {
+        id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+        content: '更新後訪問内容',
+        sortOrder: 1,
+        customer: {
+          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+          name: '佐藤 健',
+          company: '株式会社A',
+        },
+      },
+    ],
+    comments: [],
+  }
+}
+
+describe('updateReport', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── Happy path ────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('作成者が更新するとトランザクション内でdeleteMany+updateが実行されReportDetailを返す', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 1 })
+      mockUpdate.mockResolvedValueOnce(makePrismaUpdatedReport() as never)
+
+      const result = await updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput)
+
+      expect(mockTransaction).toHaveBeenCalledOnce()
+      expect(mockDeleteMany).toHaveBeenCalledWith({
+        where: { dailyReportId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' },
+      })
+      expect(mockUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' },
+          data: expect.objectContaining({
+            problem: '更新後課題',
+            plan: '更新後予定',
+          }),
+        }),
+      )
+      expect(result.id).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+      expect(result.problem).toBe('更新後課題')
+      expect(result.plan).toBe('更新後予定')
+      expect(result.visit_records).toHaveLength(1)
+      expect(result.visit_records[0].content).toBe('更新後訪問内容')
+    })
+
+    it('レスポンスにuser.roleが含まれる', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 1 })
+      mockUpdate.mockResolvedValueOnce(makePrismaUpdatedReport() as never)
+
+      const result = await updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput)
+
+      expect(result.user.role).toBe('sales')
+    })
+
+    it('updated_atがISO 8601文字列に変換される', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 1 })
+      mockUpdate.mockResolvedValueOnce(makePrismaUpdatedReport() as never)
+
+      const result = await updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput)
+
+      expect(result.updated_at).toBe('2026-04-19T12:00:00.000Z')
+    })
+  })
+
+  // ── Not found ─────────────────────────────────────────────────────────────
+
+  describe('存在しないID', () => {
+    it('findUniqueがnullを返す場合はNOT_FOUNDをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+
+      await expect(
+        updateReport(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff', updateInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+      expect(mockTransaction).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── Forbidden ─────────────────────────────────────────────────────────────
+
+  describe('権限チェック', () => {
+    it('作成者以外がリクエストするとFORBIDDENをスローする', async () => {
+      // Report belongs to salesUser2, but salesUser is the requester
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser2.id } as never)
+
+      await expect(
+        updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+
+      expect(mockTransaction).not.toHaveBeenCalled()
+    })
+
+    it('managerロールが他人の日報を更新しようとするとFORBIDDENをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+
+      await expect(
+        updateReport(managerUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+
+      expect(mockTransaction).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── Race condition ────────────────────────────────────────────────────────
+
+  describe('レースコンディション', () => {
+    it('トランザクション内でP2025が発生した場合はNOT_FOUNDをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 0 })
+      const p2025 = new Prisma.PrismaClientKnownRequestError('Record to update not found', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      })
+      mockUpdate.mockRejectedValueOnce(p2025)
+
+      await expect(
+        updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 0 })
+      const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      })
+      mockUpdate.mockRejectedValueOnce(p2002)
+
+      await expect(
+        updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput),
+      ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
     })
   })
 })
