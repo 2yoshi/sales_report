@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listReports, getReport, createReport } from './reports.service'
+import { listReports, getReport, createReport, deleteReport } from './reports.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import { Prisma } from '@prisma/client'
@@ -12,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({
       findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }))
@@ -20,6 +21,7 @@ const mockCount = vi.mocked(prisma.dailyReport.count)
 const mockFindMany = vi.mocked(prisma.dailyReport.findMany)
 const mockFindUnique = vi.mocked(prisma.dailyReport.findUnique)
 const mockCreate = vi.mocked(prisma.dailyReport.create)
+const mockDelete = vi.mocked(prisma.dailyReport.delete)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -711,6 +713,166 @@ describe('getReport', () => {
             }),
           }),
         }),
+      )
+    })
+  })
+})
+
+// ─── deleteReport tests ───────────────────────────────────────────────────────
+
+describe('deleteReport', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── Not found ─────────────────────────────────────────────────────────────
+
+  describe('存在しないID', () => {
+    it('存在しないIDに対してAppError(NOT_FOUND)をスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+
+      await expect(
+        deleteReport(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff'),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('NOT_FOUNDのとき deleteは呼ばれない', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+
+      await expect(
+        deleteReport(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff'),
+      ).rejects.toBeInstanceOf(AppError)
+
+      expect(mockDelete).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── 本人チェック ──────────────────────────────────────────────────────────
+
+  describe('本人チェック', () => {
+    it('他人の日報に対してAppError(FORBIDDEN)をスローする', async () => {
+      // Report belongs to salesUser2, but salesUser is the requester
+      mockFindUnique.mockResolvedValueOnce({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        userId: salesUser2.id,
+      } as never)
+
+      await expect(
+        deleteReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('FORBIDDENのとき deleteは呼ばれない', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        userId: salesUser2.id,
+      } as never)
+
+      await expect(
+        deleteReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+      ).rejects.toBeInstanceOf(AppError)
+
+      expect(mockDelete).not.toHaveBeenCalled()
+    })
+
+    it('managerが他人の日報を削除しようとするとFORBIDDENをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        userId: salesUser.id,
+      } as never)
+
+      await expect(
+        deleteReport(managerUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('adminが他人の日報を削除しようとするとFORBIDDENをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce({
+        id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+        userId: salesUser.id,
+      } as never)
+
+      await expect(
+        deleteReport(adminUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
+
+  // ── 正常系 ────────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('本人の日報は正常に削除されvoidを返す', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        id: reportId,
+        userId: salesUser.id,
+      } as never)
+      mockDelete.mockResolvedValueOnce({} as never)
+
+      await expect(deleteReport(salesUser, reportId)).resolves.toBeUndefined()
+    })
+
+    it('prisma.dailyReport.deleteが正しいIDで呼ばれる', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        id: reportId,
+        userId: salesUser.id,
+      } as never)
+      mockDelete.mockResolvedValueOnce({} as never)
+
+      await deleteReport(salesUser, reportId)
+
+      expect(mockDelete).toHaveBeenCalledWith({ where: { id: reportId } })
+    })
+
+    it('findUniqueはuserIdのみselectする', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        userId: salesUser.id,
+      } as never)
+      mockDelete.mockResolvedValueOnce({} as never)
+
+      await deleteReport(salesUser, reportId)
+
+      expect(mockFindUnique).toHaveBeenCalledWith({
+        where: { id: reportId },
+        select: { userId: true },
+      })
+    })
+  })
+
+  // ── 競合状態（P2025）────────────────────────────────────────────────────
+
+  describe('競合状態', () => {
+    it('P2025（findUnique後に別リクエストが削除済み）の場合はNOT_FOUNDをスローする', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        userId: salesUser.id,
+      } as never)
+      const p2025 = new Prisma.PrismaClientKnownRequestError('Record to delete does not exist.', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      })
+      mockDelete.mockRejectedValueOnce(p2025)
+
+      await expect(deleteReport(salesUser, reportId)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
+    })
+
+    it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+      const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+      mockFindUnique.mockResolvedValueOnce({
+        userId: salesUser.id,
+      } as never)
+      const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      })
+      mockDelete.mockRejectedValueOnce(p2002)
+
+      await expect(deleteReport(salesUser, reportId)).rejects.toBeInstanceOf(
+        Prisma.PrismaClientKnownRequestError,
       )
     })
   })
