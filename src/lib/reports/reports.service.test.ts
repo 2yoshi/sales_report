@@ -391,7 +391,7 @@ describe('getReport', () => {
 
   describe('存在しないID', () => {
     it('存在しないIDに対してAppError(NOT_FOUND)をスローする', async () => {
-      mockFindUnique.mockResolvedValueOnce(null)
+      mockFindUnique.mockResolvedValue(null)
 
       await expect(
         getReport(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff'),

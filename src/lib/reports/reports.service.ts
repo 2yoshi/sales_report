@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
-import type { AuthUser } from '@/types'
+import type { AuthUser, UserRole } from '@/types'
 import type { ListReportsQuery } from '@/lib/schemas/report.schema'
 
 export interface ReportListItem {
@@ -44,7 +44,7 @@ export interface ReportDetail {
   user: {
     id: string
     name: string
-    role: string
+    role: UserRole
   }
   visit_records: {
     id: string

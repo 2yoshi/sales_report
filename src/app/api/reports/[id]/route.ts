@@ -10,7 +10,7 @@ async function handleGetReport(
   user: AuthUser,
 ): Promise<NextResponse> {
   try {
-    const params = context.params as { id: string }
+    const params = await (context.params as Promise<{ id: string }>)
     const reportId = params.id
 
     const data = await getReport(user, reportId)
