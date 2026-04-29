@@ -1,14 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { GET } from './route'
+import { GET, POST } from './route'
 import * as reportsService from '@/lib/reports/reports.service'
 import { generateToken } from '@/lib/auth/jwt'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
-import type { ListReportsResult } from '@/lib/reports/reports.service'
+import type { ListReportsResult, ReportDetail } from '@/lib/reports/reports.service'
 
 vi.mock('@/lib/reports/reports.service', () => ({
   listReports: vi.fn(),
+  createReport: vi.fn(),
 }))
 
 // Mock the blacklist so tokens are never invalidated in tests
@@ -17,6 +18,7 @@ vi.mock('@/lib/auth/blacklist', () => ({
 }))
 
 const mockListReports = vi.mocked(reportsService.listReports)
+const mockCreateReport = vi.mocked(reportsService.createReport)
 
 // ─── Test users ──────────────────────────────────────────────────────────────
 
@@ -511,6 +513,232 @@ describe('GET /api/reports', () => {
           date_to: '2026-04-18',
         }),
       )
+    })
+  })
+})
+
+// ─── POST /api/reports ────────────────────────────────────────────────────────
+
+const validBody = {
+  report_date: '2026-04-18',
+  problem: '課題テキスト',
+  plan: '明日やること',
+  visit_records: [
+    {
+      customer_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      content: '商談内容',
+      sort_order: 1,
+    },
+  ],
+}
+
+const createdReport: ReportDetail = {
+  id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+  report_date: '2026-04-18',
+  problem: '課題テキスト',
+  plan: '明日やること',
+  user: { id: salesUser.id, name: salesUser.name },
+  visit_records: [
+    {
+      id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+      customer: { id: 'cccccccc-cccc-cccc-cccc-cccccccccccc', name: '佐藤 健', company: '株式会社A' },
+      content: '商談内容',
+      sort_order: 1,
+    },
+  ],
+  comments_count: 0,
+  created_at: '2026-04-18T09:00:00.000Z',
+  updated_at: '2026-04-18T09:00:00.000Z',
+}
+
+function makePostRequest(user: AuthUser, body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api/reports', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+}
+
+function makePostRequestWithoutAuth(body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api/reports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+describe('POST /api/reports', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── Happy path ──────────────────────────────────────────────────────────────
+
+  describe('API-014: salesロールは日報を作成できる', () => {
+    it('salesユーザーで201と作成された日報を返す', async () => {
+      mockCreateReport.mockResolvedValueOnce(createdReport)
+
+      const req = makePostRequest(salesUser, validBody)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(201)
+      expect(body.data.id).toBe(createdReport.id)
+      expect(body.data.report_date).toBe('2026-04-18')
+      expect(body.data.problem).toBe('課題テキスト')
+      expect(body.data.plan).toBe('明日やること')
+      expect(body.data.user.id).toBe(salesUser.id)
+      expect(body.data.visit_records).toHaveLength(1)
+      expect(body.data.comments_count).toBe(0)
+    })
+
+    it('createReportがsalesユーザーと入力で呼ばれる', async () => {
+      mockCreateReport.mockResolvedValueOnce(createdReport)
+
+      const req = makePostRequest(salesUser, validBody)
+      await POST(req, {})
+
+      expect(mockCreateReport).toHaveBeenCalledWith(
+        salesUser,
+        expect.objectContaining({
+          report_date: '2026-04-18',
+          problem: '課題テキスト',
+          plan: '明日やること',
+        }),
+      )
+    })
+  })
+
+  // ── Access control ──────────────────────────────────────────────────────────
+
+  describe('API-015: manager/adminロールは日報を作成できない', () => {
+    it('managerロールは403 FORBIDDENを返す', async () => {
+      const req = makePostRequest(managerUser, validBody)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+      expect(mockCreateReport).not.toHaveBeenCalled()
+    })
+
+    it('adminロールは403 FORBIDDENを返す', async () => {
+      const req = makePostRequest(adminUser, validBody)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+      expect(mockCreateReport).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── Authentication ──────────────────────────────────────────────────────────
+
+  describe('認証', () => {
+    it('Authorizationヘッダーがない場合は401を返す', async () => {
+      const req = makePostRequestWithoutAuth(validBody)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(401)
+      expect(body.error.code).toBe('UNAUTHORIZED')
+    })
+  })
+
+  // ── Validation ──────────────────────────────────────────────────────────────
+
+  describe('バリデーション', () => {
+    it('visit_recordsが空配列の場合は400 VALIDATION_ERRORを返す', async () => {
+      const req = makePostRequest(salesUser, { ...validBody, visit_records: [] })
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('visit_recordsが未指定の場合は400 VALIDATION_ERRORを返す', async () => {
+      const { visit_records: _omit, ...bodyWithout } = validBody
+      const req = makePostRequest(salesUser, bodyWithout)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('report_dateが未指定の場合は400 VALIDATION_ERRORを返す', async () => {
+      const { report_date: _omit, ...bodyWithout } = validBody
+      const req = makePostRequest(salesUser, bodyWithout)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('report_dateが未来日の場合は400 VALIDATION_ERRORを返す', async () => {
+      const req = makePostRequest(salesUser, { ...validBody, report_date: '2099-12-31' })
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('visit_records[].contentが1001文字の場合は400 VALIDATION_ERRORを返す', async () => {
+      const req = makePostRequest(salesUser, {
+        ...validBody,
+        visit_records: [{ ...validBody.visit_records[0], content: 'a'.repeat(1001) }],
+      })
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('problemが2001文字の場合は400 VALIDATION_ERRORを返す', async () => {
+      const req = makePostRequest(salesUser, { ...validBody, problem: 'a'.repeat(2001) })
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+  })
+
+  // ── Business rule: duplicate ────────────────────────────────────────────────
+
+  describe('重複チェック', () => {
+    it('同じユーザー・同じ日付の日報が既に存在する場合は409 DUPLICATE_REPORTを返す', async () => {
+      mockCreateReport.mockRejectedValueOnce(AppError.duplicateReport())
+
+      const req = makePostRequest(salesUser, validBody)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(409)
+      expect(body.error.code).toBe('DUPLICATE_REPORT')
+    })
+  })
+
+  // ── Error handling ──────────────────────────────────────────────────────────
+
+  describe('エラーハンドリング', () => {
+    it('サービスが予期しないエラーを投げた場合は500を返す', async () => {
+      mockCreateReport.mockRejectedValueOnce(new Error('Database connection failed'))
+
+      const req = makePostRequest(salesUser, validBody)
+      const res = await POST(req, {})
+      const body = await res.json()
+
+      expect(res.status).toBe(500)
+      expect(body.error.code).toBe('INTERNAL_SERVER_ERROR')
     })
   })
 })

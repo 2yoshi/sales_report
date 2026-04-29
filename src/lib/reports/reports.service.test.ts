@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listReports } from './reports.service'
+import { listReports, createReport } from './reports.service'
 import { prisma } from '@/lib/prisma'
+import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
 
 vi.mock('@/lib/prisma', () => ({
@@ -8,12 +9,17 @@ vi.mock('@/lib/prisma', () => ({
     dailyReport: {
       count: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
+      create: vi.fn(),
     },
+    $transaction: vi.fn(),
   },
 }))
 
 const mockCount = vi.mocked(prisma.dailyReport.count)
 const mockFindMany = vi.mocked(prisma.dailyReport.findMany)
+const mockFindUnique = vi.mocked(prisma.dailyReport.findUnique)
+const mockTransaction = vi.mocked(prisma.$transaction)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -328,6 +334,150 @@ describe('listReports', () => {
       expect(mockFindMany).toHaveBeenCalledWith(
         expect.objectContaining({ orderBy: { reportDate: 'desc' } }),
       )
+    })
+  })
+})
+
+// ─── createReport ─────────────────────────────────────────────────────────────
+
+const createInput = {
+  report_date: '2026-04-18',
+  problem: '課題テキスト',
+  plan: '明日やること',
+  visit_records: [
+    {
+      customer_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      content: '商談内容',
+      sort_order: 1,
+    },
+  ],
+}
+
+function makePrismaCreatedReport() {
+  return {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    userId: salesUser.id,
+    reportDate: new Date('2026-04-18'),
+    problem: '課題テキスト',
+    plan: '明日やること',
+    createdAt: new Date('2026-04-18T09:00:00.000Z'),
+    updatedAt: new Date('2026-04-18T09:00:00.000Z'),
+    user: { id: salesUser.id, name: salesUser.name },
+    visitRecords: [
+      {
+        id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        content: '商談内容',
+        sortOrder: 1,
+        customer: {
+          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+          name: '佐藤 健',
+          company: '株式会社A',
+        },
+      },
+    ],
+    _count: { comments: 0 },
+  }
+}
+
+describe('createReport', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── Happy path ────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('重複がない場合は$transactionでDailyReportとVisitRecordsを作成し結果を返す', async () => {
+      const prismaReport = makePrismaCreatedReport()
+      mockFindUnique.mockResolvedValueOnce(null)
+      // $transaction calls the callback with a tx object — simulate by calling cb with prisma itself
+      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
+        return cb(prisma)
+      })
+      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+
+      const result = await createReport(salesUser, createInput)
+
+      expect(result.id).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+      expect(result.report_date).toBe('2026-04-18')
+      expect(result.problem).toBe('課題テキスト')
+      expect(result.plan).toBe('明日やること')
+      expect(result.user.id).toBe(salesUser.id)
+      expect(result.visit_records).toHaveLength(1)
+      expect(result.comments_count).toBe(0)
+    })
+
+    it('findUniqueはuserId + reportDateの複合ユニークキーで呼ばれる', async () => {
+      const prismaReport = makePrismaCreatedReport()
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
+        return cb(prisma)
+      })
+      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+
+      await createReport(salesUser, createInput)
+
+      expect(mockFindUnique).toHaveBeenCalledWith({
+        where: {
+          userId_reportDate: {
+            userId: salesUser.id,
+            reportDate: new Date('2026-04-18'),
+          },
+        },
+      })
+    })
+
+    it('レスポンスのvisit_recordsにcustomer情報・content・sort_orderが含まれる', async () => {
+      const prismaReport = makePrismaCreatedReport()
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
+        return cb(prisma)
+      })
+      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+
+      const result = await createReport(salesUser, createInput)
+
+      const vr = result.visit_records[0]
+      expect(vr.id).toBe('dddddddd-dddd-dddd-dddd-dddddddddddd')
+      expect(vr.customer.id).toBe('cccccccc-cccc-cccc-cccc-cccccccccccc')
+      expect(vr.customer.name).toBe('佐藤 健')
+      expect(vr.customer.company).toBe('株式会社A')
+      expect(vr.content).toBe('商談内容')
+      expect(vr.sort_order).toBe(1)
+    })
+
+    it('created_atとupdated_atがISO 8601文字列に変換される', async () => {
+      const prismaReport = makePrismaCreatedReport()
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
+        return cb(prisma)
+      })
+      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+
+      const result = await createReport(salesUser, createInput)
+
+      expect(result.created_at).toBe('2026-04-18T09:00:00.000Z')
+      expect(result.updated_at).toBe('2026-04-18T09:00:00.000Z')
+    })
+  })
+
+  // ── Duplicate check ───────────────────────────────────────────────────────
+
+  describe('重複チェック', () => {
+    it('同じuserId + reportDateの日報が既に存在する場合はAPPError DUPLICATE_REPORTをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await expect(createReport(salesUser, createInput)).rejects.toMatchObject({
+        code: 'DUPLICATE_REPORT',
+      })
+    })
+
+    it('重複時は$transactionが呼ばれない', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await expect(createReport(salesUser, createInput)).rejects.toBeInstanceOf(AppError)
+
+      expect(mockTransaction).not.toHaveBeenCalled()
     })
   })
 })
