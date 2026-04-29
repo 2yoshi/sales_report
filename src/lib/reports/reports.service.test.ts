@@ -1058,9 +1058,9 @@ describe('deleteReport', () => {
     })
   })
 
-  // ─── getVisitRecords ──────────────────────────────────────────────────────────
+})
 
-  describe('getVisitRecords', () => {
+describe('getVisitRecords', () => {
     const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 
     function makePrismaReportWithVisitRecords(userId: string) {
@@ -1192,4 +1192,4 @@ describe('deleteReport', () => {
       expect(result).toEqual([])
     })
   })
-})
+
