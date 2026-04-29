@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
-import type { AuthUser } from '@/types'
+import type { AuthUser, UserRole } from '@/types'
 import type { ListReportsQuery, CreateReportInput } from '@/lib/schemas/report.schema'
 
 export interface ReportListItem {
@@ -38,6 +38,39 @@ export interface ListReportsResult {
     page: number
     per_page: number
   }
+}
+
+export interface ReportDetail {
+  id: string
+  report_date: string
+  problem: string
+  plan: string
+  user: {
+    id: string
+    name: string
+    role: UserRole
+  }
+  visit_records: {
+    id: string
+    customer: {
+      id: string
+      name: string
+      company: string | null
+    }
+    content: string
+    sort_order: number
+  }[]
+  comments: {
+    id: string
+    body: string
+    commenter: {
+      id: string
+      name: string
+    }
+    created_at: string
+  }[]
+  created_at: string
+  updated_at: string
 }
 
 export async function listReports(
@@ -210,6 +243,75 @@ export async function createReport(
       sort_order: vr.sortOrder,
     })),
     comments_count: report._count.comments,
+    created_at: report.createdAt.toISOString(),
+    updated_at: report.updatedAt.toISOString(),
+  }
+}
+
+export async function getReport(user: AuthUser, reportId: string): Promise<ReportDetail> {
+  const report = await prisma.dailyReport.findUnique({
+    where: { id: reportId },
+    include: {
+      user: {
+        select: { id: true, name: true, role: true },
+      },
+      visitRecords: {
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          customer: {
+            select: { id: true, name: true, company: true },
+          },
+        },
+      },
+      comments: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          commenter: {
+            select: { id: true, name: true },
+          },
+        },
+      },
+    },
+  })
+
+  if (!report) {
+    throw AppError.notFound('日報')
+  }
+
+  // sales role can only view their own reports
+  if (user.role === 'sales' && report.userId !== user.id) {
+    throw AppError.forbidden()
+  }
+
+  return {
+    id: report.id,
+    report_date: report.reportDate.toISOString().slice(0, 10),
+    problem: report.problem,
+    plan: report.plan,
+    user: {
+      id: report.user.id,
+      name: report.user.name,
+      role: report.user.role,
+    },
+    visit_records: report.visitRecords.map((vr) => ({
+      id: vr.id,
+      customer: {
+        id: vr.customer.id,
+        name: vr.customer.name,
+        company: vr.customer.company,
+      },
+      content: vr.content,
+      sort_order: vr.sortOrder,
+    })),
+    comments: report.comments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      commenter: {
+        id: c.commenter.id,
+        name: c.commenter.name,
+      },
+      created_at: c.createdAt.toISOString(),
+    })),
     created_at: report.createdAt.toISOString(),
     updated_at: report.updatedAt.toISOString(),
   }
