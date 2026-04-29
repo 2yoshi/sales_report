@@ -248,6 +248,23 @@ export async function createReport(
   }
 }
 
+export async function deleteReport(user: AuthUser, reportId: string): Promise<void> {
+  const report = await prisma.dailyReport.findUnique({
+    where: { id: reportId },
+    select: { id: true, userId: true },
+  })
+
+  if (!report) {
+    throw AppError.notFound('日報')
+  }
+
+  if (report.userId !== user.id) {
+    throw AppError.forbidden()
+  }
+
+  await prisma.dailyReport.delete({ where: { id: reportId } })
+}
+
 export async function getReport(user: AuthUser, reportId: string): Promise<ReportDetail> {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },

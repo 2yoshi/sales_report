@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth/guard'
-import { getReport } from '@/lib/reports/reports.service'
+import { getReport, deleteReport } from '@/lib/reports/reports.service'
 import { handleError } from '@/lib/errors'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
@@ -28,3 +28,25 @@ async function handleGetReport(
 }
 
 export const GET = withAuth(handleGetReport)
+
+async function handleDeleteReport(
+  _req: NextRequest,
+  context: Record<string, unknown>,
+  user: AuthUser,
+): Promise<NextResponse> {
+  try {
+    const params = await (context.params as Promise<{ id: string }>)
+    const reportId = params.id
+
+    if (!UUID_REGEX.test(reportId)) {
+      throw AppError.notFound('日報')
+    }
+
+    await deleteReport(user, reportId)
+    return new NextResponse(null, { status: 204 })
+  } catch (err) {
+    return handleError(err)
+  }
+}
+
+export const DELETE = withAuth(handleDeleteReport)
