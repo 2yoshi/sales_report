@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { GET, PUT } from './route'
+import { GET, PUT, DELETE } from './route'
 import * as reportsService from '@/lib/reports/reports.service'
 import { generateToken } from '@/lib/auth/jwt'
 import { AppError } from '@/lib/errors/AppError'
@@ -11,6 +11,7 @@ vi.mock('@/lib/reports/reports.service', () => ({
   listReports: vi.fn(),
   getReport: vi.fn(),
   updateReport: vi.fn(),
+  deleteReport: vi.fn(),
 }))
 
 // Mock the blacklist so tokens are never invalidated in tests
@@ -20,6 +21,7 @@ vi.mock('@/lib/auth/blacklist', () => ({
 
 const mockGetReport = vi.mocked(reportsService.getReport)
 const mockUpdateReport = vi.mocked(reportsService.updateReport)
+const mockDeleteReport = vi.mocked(reportsService.deleteReport)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -106,6 +108,21 @@ function makeRequest(user: AuthUser, reportId = REPORT_ID): NextRequest {
 function makeRequestWithoutAuth(reportId = REPORT_ID): NextRequest {
   return new NextRequest(`http://localhost/api/reports/${reportId}`, {
     method: 'GET',
+  })
+}
+
+function makeDeleteRequest(user: AuthUser, reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+    },
+  })
+}
+
+function makeDeleteRequestWithoutAuth(reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}`, {
+    method: 'DELETE',
   })
 }
 
@@ -567,6 +584,127 @@ describe('PUT /api/reports/:id', () => {
 
       const req = makePutRequest(salesUser)
       const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(500)
+      expect(body.error.code).toBe('INTERNAL_SERVER_ERROR')
+    })
+  })
+})
+
+// ─── DELETE /api/reports/:id ──────────────────────────────────────────────────
+
+describe('DELETE /api/reports/:id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── 認証 ─────────────────────────────────────────────────────────────────
+
+  describe('認証', () => {
+    it('Authorizationヘッダーがない場合は401を返す', async () => {
+      const req = makeDeleteRequestWithoutAuth()
+      const res = await DELETE(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(401)
+      expect(body.error.code).toBe('UNAUTHORIZED')
+    })
+  })
+
+  // ── API-021: 作成者本人トークン → 204 ────────────────────────────────────
+
+  describe('API-021: 作成者本人が削除すると204を返す', () => {
+    it('204 No Content でボディなしのレスポンスを返す', async () => {
+      mockDeleteReport.mockResolvedValueOnce(undefined)
+
+      const req = makeDeleteRequest(salesUser)
+      const res = await DELETE(req, makeContext())
+
+      expect(res.status).toBe(204)
+      expect(res.body).toBeNull()
+      expect(mockDeleteReport).toHaveBeenCalledWith(salesUser, REPORT_ID)
+    })
+  })
+
+  // ── API-022: 別salesユーザーのトークン → 403 FORBIDDEN ───────────────────
+
+  describe('API-022: 別salesユーザーが削除しようとすると403を返す', () => {
+    it('403とFORBIDDENコードを返す', async () => {
+      mockDeleteReport.mockRejectedValueOnce(AppError.forbidden())
+
+      const req = makeDeleteRequest(salesUser2)
+      const res = await DELETE(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+    })
+  })
+
+  // ── managerのトークン → 403 FORBIDDEN ────────────────────────────────────
+
+  describe('managerが他人の日報を削除しようとすると403を返す', () => {
+    it('403とFORBIDDENコードを返す', async () => {
+      mockDeleteReport.mockRejectedValueOnce(AppError.forbidden())
+
+      const req = makeDeleteRequest(managerUser)
+      const res = await DELETE(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+    })
+  })
+
+  // ── adminのトークン → 403 FORBIDDEN ──────────────────────────────────────
+
+  describe('adminが他人の日報を削除しようとすると403を返す', () => {
+    it('403とFORBIDDENコードを返す', async () => {
+      mockDeleteReport.mockRejectedValueOnce(AppError.forbidden())
+
+      const req = makeDeleteRequest(adminUser)
+      const res = await DELETE(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+    })
+  })
+
+  // ── 存在しないID → 404 NOT_FOUND ─────────────────────────────────────────
+
+  describe('存在しないIDを指定すると404を返す', () => {
+    it('404とNOT_FOUNDコードを返す', async () => {
+      mockDeleteReport.mockRejectedValueOnce(AppError.notFound('日報'))
+
+      const req = makeDeleteRequest(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff')
+      const res = await DELETE(req, makeContext('ffffffff-ffff-ffff-ffff-ffffffffffff'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+    })
+
+    it('UUID形式でないIDを指定すると404を返す（Prismaエラーを回避）', async () => {
+      const req = makeDeleteRequest(salesUser, 'not-a-uuid')
+      const res = await DELETE(req, makeContext('not-a-uuid'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+      expect(mockDeleteReport).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── エラーハンドリング ────────────────────────────────────────────────────
+
+  describe('エラーハンドリング', () => {
+    it('サービスが予期しないエラーを投げた場合は500を返す', async () => {
+      mockDeleteReport.mockRejectedValueOnce(new Error('Database connection failed'))
+
+      const req = makeDeleteRequest(salesUser)
+      const res = await DELETE(req, makeContext())
       const body = await res.json()
 
       expect(res.status).toBe(500)
