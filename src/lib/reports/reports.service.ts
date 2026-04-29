@@ -439,7 +439,10 @@ export async function getVisitRecords(
       userId: true,
       visitRecords: {
         orderBy: { sortOrder: 'asc' },
-        include: {
+        select: {
+          id: true,
+          content: true,
+          sortOrder: true,
           customer: {
             select: { id: true, name: true, company: true },
           },
