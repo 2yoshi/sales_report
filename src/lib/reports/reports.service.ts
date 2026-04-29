@@ -272,41 +272,41 @@ export async function updateReport(
       await tx.visitRecord.deleteMany({ where: { dailyReportId: reportId } })
 
       return tx.dailyReport.update({
-      where: { id: reportId },
-      data: {
-        problem: input.problem,
-        plan: input.plan,
-        visitRecords: {
-          create: input.visit_records.map((vr) => ({
-            customerId: vr.customer_id,
-            content: vr.content,
-            sortOrder: vr.sort_order,
-          })),
+        where: { id: reportId },
+        data: {
+          problem: input.problem,
+          plan: input.plan,
+          visitRecords: {
+            create: input.visit_records.map((vr) => ({
+              customerId: vr.customer_id,
+              content: vr.content,
+              sortOrder: vr.sort_order,
+            })),
+          },
         },
-      },
-      include: {
-        user: {
-          select: { id: true, name: true, role: true },
-        },
-        visitRecords: {
-          orderBy: { sortOrder: 'asc' },
-          include: {
-            customer: {
-              select: { id: true, name: true, company: true },
+        include: {
+          user: {
+            select: { id: true, name: true, role: true },
+          },
+          visitRecords: {
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              customer: {
+                select: { id: true, name: true, company: true },
+              },
+            },
+          },
+          comments: {
+            orderBy: { createdAt: 'asc' },
+            include: {
+              commenter: {
+                select: { id: true, name: true },
+              },
             },
           },
         },
-        comments: {
-          orderBy: { createdAt: 'asc' },
-          include: {
-            commenter: {
-              select: { id: true, name: true },
-            },
-          },
-        },
-      },
+      })
     })
-  })
   } catch (err) {
     // Race condition: report was deleted between the ownership check and the update
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
