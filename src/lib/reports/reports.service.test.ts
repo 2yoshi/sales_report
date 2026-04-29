@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listReports } from './reports.service'
+import { listReports, getReport } from './reports.service'
 import { prisma } from '@/lib/prisma'
+import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
 
 vi.mock('@/lib/prisma', () => ({
@@ -8,12 +9,14 @@ vi.mock('@/lib/prisma', () => ({
     dailyReport: {
       count: vi.fn(),
       findMany: vi.fn(),
+      findUnique: vi.fn(),
     },
   },
 }))
 
 const mockCount = vi.mocked(prisma.dailyReport.count)
 const mockFindMany = vi.mocked(prisma.dailyReport.findMany)
+const mockFindUnique = vi.mocked(prisma.dailyReport.findUnique)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -327,6 +330,205 @@ describe('listReports', () => {
 
       expect(mockFindMany).toHaveBeenCalledWith(
         expect.objectContaining({ orderBy: { reportDate: 'desc' } }),
+      )
+    })
+  })
+})
+
+// ─── getReport tests ──────────────────────────────────────────────────────────
+
+function makePrismaReportDetail(overrides: Partial<{
+  id: string
+  userId: string
+  reportDate: Date
+}> = {}) {
+  const userId = overrides.userId ?? salesUser.id
+  return {
+    id: overrides.id ?? 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    userId,
+    reportDate: overrides.reportDate ?? new Date('2026-04-19'),
+    problem: '課題テキスト',
+    plan: '翌日予定テキスト',
+    createdAt: new Date('2026-04-19T09:00:00.000Z'),
+    updatedAt: new Date('2026-04-19T09:00:00.000Z'),
+    user: {
+      id: userId,
+      name: salesUser.name,
+      role: 'sales' as const,
+    },
+    visitRecords: [
+      {
+        id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        content: '商談内容',
+        sortOrder: 1,
+        customer: {
+          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+          name: '佐藤 健',
+          company: '株式会社A',
+        },
+      },
+    ],
+    comments: [
+      {
+        id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        body: 'コメント本文',
+        createdAt: new Date('2026-04-19T18:32:00.000Z'),
+        commenter: {
+          id: managerUser.id,
+          name: managerUser.name,
+        },
+      },
+    ],
+  }
+}
+
+describe('getReport', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── Not found ─────────────────────────────────────────────────────────────
+
+  describe('存在しないID', () => {
+    it('存在しないIDに対してAppError(NOT_FOUND)をスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+
+      await expect(
+        getReport(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff'),
+      ).rejects.toThrow(AppError)
+
+      await expect(
+        getReport(salesUser, 'ffffffff-ffff-ffff-ffff-ffffffffffff'),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+  })
+
+  // ── Role-based access control ─────────────────────────────────────────────
+
+  describe('アクセス制御', () => {
+    it('salesユーザーは自分の日報を取得できる', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail({ userId: salesUser.id }))
+
+      const result = await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(result.id).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+      expect(result.user.id).toBe(salesUser.id)
+    })
+
+    it('salesユーザーが他人の日報を取得しようとするとAppError(FORBIDDEN)をスローする', async () => {
+      // Report belongs to salesUser2, but salesUser is the requester
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail({ userId: salesUser2.id }))
+
+      await expect(
+        getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('managerは他のユーザーの日報を取得できる', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail({ userId: salesUser.id }))
+
+      const result = await getReport(managerUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(result.id).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    })
+
+    it('adminは他のユーザーの日報を取得できる', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail({ userId: salesUser.id }))
+
+      const result = await getReport(adminUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(result.id).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+    })
+  })
+
+  // ── Response shape ────────────────────────────────────────────────────────
+
+  describe('レスポンス形式', () => {
+    it('report_dateがYYYY-MM-DD形式の文字列に変換される', async () => {
+      mockFindUnique.mockResolvedValueOnce(
+        makePrismaReportDetail({ reportDate: new Date('2026-04-19') }),
+      )
+
+      const result = await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(result.report_date).toBe('2026-04-19')
+    })
+
+    it('userフィールドにid・name・roleが含まれる', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail())
+
+      const result = await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(result.user.id).toBe(salesUser.id)
+      expect(result.user.name).toBe(salesUser.name)
+      expect(result.user.role).toBe('sales')
+    })
+
+    it('visit_recordsにcustomer情報・content・sort_orderが含まれる', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail())
+
+      const result = await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      const vr = result.visit_records[0]
+      expect(vr.id).toBe('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb')
+      expect(vr.customer.id).toBe('cccccccc-cccc-cccc-cccc-cccccccccccc')
+      expect(vr.customer.name).toBe('佐藤 健')
+      expect(vr.customer.company).toBe('株式会社A')
+      expect(vr.content).toBe('商談内容')
+      expect(vr.sort_order).toBe(1)
+    })
+
+    it('commentsにid・body・commenter・created_atが含まれる', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail())
+
+      const result = await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      const comment = result.comments[0]
+      expect(comment.id).toBe('dddddddd-dddd-dddd-dddd-dddddddddddd')
+      expect(comment.body).toBe('コメント本文')
+      expect(comment.commenter.id).toBe(managerUser.id)
+      expect(comment.commenter.name).toBe(managerUser.name)
+      expect(comment.created_at).toBe('2026-04-19T18:32:00.000Z')
+    })
+
+    it('created_atとupdated_atがISO 8601文字列に変換される', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail())
+
+      const result = await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(result.created_at).toBe('2026-04-19T09:00:00.000Z')
+      expect(result.updated_at).toBe('2026-04-19T09:00:00.000Z')
+    })
+
+    it('visit_recordsをsortOrder昇順で取得するクエリが発行される', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail())
+
+      await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(mockFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            visitRecords: expect.objectContaining({
+              orderBy: { sortOrder: 'asc' },
+            }),
+          }),
+        }),
+      )
+    })
+
+    it('commentsをcreatedAt昇順で取得するクエリが発行される', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaReportDetail())
+
+      await getReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+
+      expect(mockFindUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            comments: expect.objectContaining({
+              orderBy: { createdAt: 'asc' },
+            }),
+          }),
+        }),
       )
     })
   })
