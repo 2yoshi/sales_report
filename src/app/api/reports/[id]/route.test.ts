@@ -207,6 +207,16 @@ describe('GET /api/reports/:id', () => {
       expect(res.status).toBe(404)
       expect(body.error.code).toBe('NOT_FOUND')
     })
+
+    it('UUID形式でないIDを指定すると404を返す（Prismaエラーを回避）', async () => {
+      const req = makeRequest(salesUser, 'not-a-uuid')
+      const res = await GET(req, makeContext('not-a-uuid'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+      expect(mockGetReport).not.toHaveBeenCalled()
+    })
   })
 
   // ── RPT-021: salesユーザーが自分の日報を取得 → 200 ─────────────────────────
