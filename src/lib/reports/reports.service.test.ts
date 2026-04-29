@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { listReports, createReport } from './reports.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
+import { Prisma } from '@prisma/client'
 import type { AuthUser } from '@/types'
 
 vi.mock('@/lib/prisma', () => ({
@@ -12,14 +13,13 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
       create: vi.fn(),
     },
-    $transaction: vi.fn(),
   },
 }))
 
 const mockCount = vi.mocked(prisma.dailyReport.count)
 const mockFindMany = vi.mocked(prisma.dailyReport.findMany)
 const mockFindUnique = vi.mocked(prisma.dailyReport.findUnique)
-const mockTransaction = vi.mocked(prisma.$transaction)
+const mockCreate = vi.mocked(prisma.dailyReport.create)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -387,14 +387,10 @@ describe('createReport', () => {
   // ── Happy path ────────────────────────────────────────────────────────────
 
   describe('正常系', () => {
-    it('重複がない場合は$transactionでDailyReportとVisitRecordsを作成し結果を返す', async () => {
+    it('重複がない場合はDailyReportとVisitRecordsを作成し結果を返す', async () => {
       const prismaReport = makePrismaCreatedReport()
       mockFindUnique.mockResolvedValueOnce(null)
-      // $transaction calls the callback with a tx object — simulate by calling cb with prisma itself
-      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
-        return cb(prisma)
-      })
-      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+      mockCreate.mockResolvedValueOnce(prismaReport as never)
 
       const result = await createReport(salesUser, createInput)
 
@@ -408,12 +404,8 @@ describe('createReport', () => {
     })
 
     it('findUniqueはuserId + reportDateの複合ユニークキーで呼ばれる', async () => {
-      const prismaReport = makePrismaCreatedReport()
       mockFindUnique.mockResolvedValueOnce(null)
-      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
-        return cb(prisma)
-      })
-      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
 
       await createReport(salesUser, createInput)
 
@@ -427,13 +419,34 @@ describe('createReport', () => {
       })
     })
 
-    it('レスポンスのvisit_recordsにcustomer情報・content・sort_orderが含まれる', async () => {
-      const prismaReport = makePrismaCreatedReport()
+    it('createにvisitRecords.createで正しくマッピングされたデータが渡される', async () => {
       mockFindUnique.mockResolvedValueOnce(null)
-      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
-        return cb(prisma)
-      })
-      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await createReport(salesUser, createInput)
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: salesUser.id,
+            reportDate: new Date('2026-04-18'),
+            visitRecords: {
+              create: [
+                {
+                  customerId: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+                  content: '商談内容',
+                  sortOrder: 1,
+                },
+              ],
+            },
+          }),
+        }),
+      )
+    })
+
+    it('レスポンスのvisit_recordsにcustomer情報・content・sort_orderが含まれる', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
 
       const result = await createReport(salesUser, createInput)
 
@@ -447,12 +460,8 @@ describe('createReport', () => {
     })
 
     it('created_atとupdated_atがISO 8601文字列に変換される', async () => {
-      const prismaReport = makePrismaCreatedReport()
       mockFindUnique.mockResolvedValueOnce(null)
-      mockTransaction.mockImplementationOnce(async (cb: (tx: typeof prisma) => Promise<unknown>) => {
-        return cb(prisma)
-      })
-      vi.mocked(prisma.dailyReport.create).mockResolvedValueOnce(prismaReport as never)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
 
       const result = await createReport(salesUser, createInput)
 
@@ -464,7 +473,7 @@ describe('createReport', () => {
   // ── Duplicate check ───────────────────────────────────────────────────────
 
   describe('重複チェック', () => {
-    it('同じuserId + reportDateの日報が既に存在する場合はAPPError DUPLICATE_REPORTをスローする', async () => {
+    it('findUniqueで重複が見つかった場合はDUPLICATE_REPORTをスローする', async () => {
       mockFindUnique.mockResolvedValueOnce(makePrismaCreatedReport() as never)
 
       await expect(createReport(salesUser, createInput)).rejects.toMatchObject({
@@ -472,12 +481,38 @@ describe('createReport', () => {
       })
     })
 
-    it('重複時は$transactionが呼ばれない', async () => {
+    it('findUniqueで重複が見つかった場合はcreateが呼ばれない', async () => {
       mockFindUnique.mockResolvedValueOnce(makePrismaCreatedReport() as never)
 
       await expect(createReport(salesUser, createInput)).rejects.toBeInstanceOf(AppError)
 
-      expect(mockTransaction).not.toHaveBeenCalled()
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('P2002（DB unique制約違反）が発生した場合もDUPLICATE_REPORTをスローする（競合状態対応）', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      const p2002 = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`user_id`,`report_date`)',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      )
+      mockCreate.mockRejectedValueOnce(p2002)
+
+      await expect(createReport(salesUser, createInput)).rejects.toMatchObject({
+        code: 'DUPLICATE_REPORT',
+      })
+    })
+
+    it('P2002以外のPrismaエラーはそのまま再スローされる', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      const p2025 = new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      })
+      mockCreate.mockRejectedValueOnce(p2025)
+
+      await expect(createReport(salesUser, createInput)).rejects.toBeInstanceOf(
+        Prisma.PrismaClientKnownRequestError,
+      )
     })
   })
 })

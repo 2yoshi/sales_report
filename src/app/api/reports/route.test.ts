@@ -5,7 +5,7 @@ import * as reportsService from '@/lib/reports/reports.service'
 import { generateToken } from '@/lib/auth/jwt'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
-import type { ListReportsResult, ReportDetail } from '@/lib/reports/reports.service'
+import type { ListReportsResult, CreateReportResult } from '@/lib/reports/reports.service'
 
 vi.mock('@/lib/reports/reports.service', () => ({
   listReports: vi.fn(),
@@ -532,7 +532,7 @@ const validBody = {
   ],
 }
 
-const createdReport: ReportDetail = {
+const createdReport: CreateReportResult = {
   id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
   report_date: '2026-04-18',
   problem: '課題テキスト',

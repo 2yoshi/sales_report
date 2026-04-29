@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
@@ -27,8 +28,8 @@ export interface ReportListItem {
   updated_at: string
 }
 
-// ReportDetail is the same shape as ReportListItem — reused for single-resource responses
-export type ReportDetail = ReportListItem
+// POST /reports レスポンス型（ReportListItemと同形。GET /reports/:idのReportDetailとは別定義）
+export type CreateReportResult = ReportListItem
 
 export interface ListReportsResult {
   data: ReportListItem[]
@@ -131,10 +132,10 @@ export async function listReports(
 export async function createReport(
   user: AuthUser,
   input: CreateReportInput,
-): Promise<ReportDetail> {
+): Promise<CreateReportResult> {
   const reportDate = new Date(input.report_date)
 
-  // Check for duplicate: same user + same date
+  // Early duplicate check: same user + same date (common path)
   const existing = await prisma.dailyReport.findUnique({
     where: {
       userId_reportDate: {
@@ -147,9 +148,10 @@ export async function createReport(
     throw AppError.duplicateReport()
   }
 
-  // Create report and all visit_records atomically
-  const report = await prisma.$transaction(async (tx) => {
-    const created = await tx.dailyReport.create({
+  // Nested create is atomic — no explicit transaction needed
+  let report
+  try {
+    report = await prisma.dailyReport.create({
       data: {
         userId: user.id,
         reportDate,
@@ -180,8 +182,13 @@ export async function createReport(
         },
       },
     })
-    return created
-  })
+  } catch (err) {
+    // Race condition: another request inserted the same user+date between our check and insert
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw AppError.duplicateReport()
+    }
+    throw err
+  }
 
   return {
     id: report.id,
