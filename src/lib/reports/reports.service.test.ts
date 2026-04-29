@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listReports, getReport } from './reports.service'
+import { listReports, getReport, createReport } from './reports.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
+import { Prisma } from '@prisma/client'
 import type { AuthUser } from '@/types'
 
 vi.mock('@/lib/prisma', () => ({
@@ -10,6 +11,7 @@ vi.mock('@/lib/prisma', () => ({
       count: vi.fn(),
       findMany: vi.fn(),
       findUnique: vi.fn(),
+      create: vi.fn(),
     },
   },
 }))
@@ -17,6 +19,7 @@ vi.mock('@/lib/prisma', () => ({
 const mockCount = vi.mocked(prisma.dailyReport.count)
 const mockFindMany = vi.mocked(prisma.dailyReport.findMany)
 const mockFindUnique = vi.mocked(prisma.dailyReport.findUnique)
+const mockCreate = vi.mocked(prisma.dailyReport.create)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -330,6 +333,185 @@ describe('listReports', () => {
 
       expect(mockFindMany).toHaveBeenCalledWith(
         expect.objectContaining({ orderBy: { reportDate: 'desc' } }),
+      )
+    })
+  })
+})
+
+// ─── createReport ─────────────────────────────────────────────────────────────
+
+const createInput = {
+  report_date: '2026-04-18',
+  problem: '課題テキスト',
+  plan: '明日やること',
+  visit_records: [
+    {
+      customer_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+      content: '商談内容',
+      sort_order: 1,
+    },
+  ],
+}
+
+function makePrismaCreatedReport() {
+  return {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    userId: salesUser.id,
+    reportDate: new Date('2026-04-18'),
+    problem: '課題テキスト',
+    plan: '明日やること',
+    createdAt: new Date('2026-04-18T09:00:00.000Z'),
+    updatedAt: new Date('2026-04-18T09:00:00.000Z'),
+    user: { id: salesUser.id, name: salesUser.name },
+    visitRecords: [
+      {
+        id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        content: '商談内容',
+        sortOrder: 1,
+        customer: {
+          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+          name: '佐藤 健',
+          company: '株式会社A',
+        },
+      },
+    ],
+    _count: { comments: 0 },
+  }
+}
+
+describe('createReport', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── Happy path ────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('重複がない場合はDailyReportとVisitRecordsを作成し結果を返す', async () => {
+      const prismaReport = makePrismaCreatedReport()
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockCreate.mockResolvedValueOnce(prismaReport as never)
+
+      const result = await createReport(salesUser, createInput)
+
+      expect(result.id).toBe('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')
+      expect(result.report_date).toBe('2026-04-18')
+      expect(result.problem).toBe('課題テキスト')
+      expect(result.plan).toBe('明日やること')
+      expect(result.user.id).toBe(salesUser.id)
+      expect(result.visit_records).toHaveLength(1)
+      expect(result.comments_count).toBe(0)
+    })
+
+    it('findUniqueはuserId + reportDateの複合ユニークキーで呼ばれる', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await createReport(salesUser, createInput)
+
+      expect(mockFindUnique).toHaveBeenCalledWith({
+        where: {
+          userId_reportDate: {
+            userId: salesUser.id,
+            reportDate: new Date('2026-04-18'),
+          },
+        },
+      })
+    })
+
+    it('createにvisitRecords.createで正しくマッピングされたデータが渡される', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await createReport(salesUser, createInput)
+
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: salesUser.id,
+            reportDate: new Date('2026-04-18'),
+            visitRecords: {
+              create: [
+                {
+                  customerId: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+                  content: '商談内容',
+                  sortOrder: 1,
+                },
+              ],
+            },
+          }),
+        }),
+      )
+    })
+
+    it('レスポンスのvisit_recordsにcustomer情報・content・sort_orderが含まれる', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      const result = await createReport(salesUser, createInput)
+
+      const vr = result.visit_records[0]
+      expect(vr.id).toBe('dddddddd-dddd-dddd-dddd-dddddddddddd')
+      expect(vr.customer.id).toBe('cccccccc-cccc-cccc-cccc-cccccccccccc')
+      expect(vr.customer.name).toBe('佐藤 健')
+      expect(vr.customer.company).toBe('株式会社A')
+      expect(vr.content).toBe('商談内容')
+      expect(vr.sort_order).toBe(1)
+    })
+
+    it('created_atとupdated_atがISO 8601文字列に変換される', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      mockCreate.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      const result = await createReport(salesUser, createInput)
+
+      expect(result.created_at).toBe('2026-04-18T09:00:00.000Z')
+      expect(result.updated_at).toBe('2026-04-18T09:00:00.000Z')
+    })
+  })
+
+  // ── Duplicate check ───────────────────────────────────────────────────────
+
+  describe('重複チェック', () => {
+    it('findUniqueで重複が見つかった場合はDUPLICATE_REPORTをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await expect(createReport(salesUser, createInput)).rejects.toMatchObject({
+        code: 'DUPLICATE_REPORT',
+      })
+    })
+
+    it('findUniqueで重複が見つかった場合はcreateが呼ばれない', async () => {
+      mockFindUnique.mockResolvedValueOnce(makePrismaCreatedReport() as never)
+
+      await expect(createReport(salesUser, createInput)).rejects.toBeInstanceOf(AppError)
+
+      expect(mockCreate).not.toHaveBeenCalled()
+    })
+
+    it('P2002（DB unique制約違反）が発生した場合もDUPLICATE_REPORTをスローする（競合状態対応）', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      const p2002 = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`user_id`,`report_date`)',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      )
+      mockCreate.mockRejectedValueOnce(p2002)
+
+      await expect(createReport(salesUser, createInput)).rejects.toMatchObject({
+        code: 'DUPLICATE_REPORT',
+      })
+    })
+
+    it('P2002以外のPrismaエラーはそのまま再スローされる', async () => {
+      mockFindUnique.mockResolvedValueOnce(null)
+      const p2025 = new Prisma.PrismaClientKnownRequestError('Record not found', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      })
+      mockCreate.mockRejectedValueOnce(p2025)
+
+      await expect(createReport(salesUser, createInput)).rejects.toBeInstanceOf(
+        Prisma.PrismaClientKnownRequestError,
       )
     })
   })
