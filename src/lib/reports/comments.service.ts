@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
-import type { AuthUser } from '@/types'
+import type { AuthUser, UserRole } from '@/types'
 
 export interface CommentItem {
   id: string
@@ -8,7 +8,7 @@ export interface CommentItem {
   commenter: {
     id: string
     name: string
-    role: string
+    role: UserRole
   }
   created_at: string
   updated_at: string
@@ -17,7 +17,7 @@ export interface CommentItem {
 export async function listComments(user: AuthUser, reportId: string): Promise<CommentItem[]> {
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
-    select: { id: true, userId: true },
+    select: { userId: true },
   })
 
   if (!report) {

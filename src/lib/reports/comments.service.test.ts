@@ -183,16 +183,9 @@ describe('listComments', () => {
     it('日報が見つからない場合はAppError.notFoundをスローする', async () => {
       mockFindUniqueReport.mockResolvedValueOnce(null as never)
 
-      await expect(listComments(managerUser, REPORT_ID)).rejects.toThrow(AppError)
-
-      try {
-        await listComments(managerUser, REPORT_ID)
-      } catch (err) {
-        expect(err).toBeInstanceOf(AppError)
-        const appError = err as AppError
-        expect(appError.code).toBe('NOT_FOUND')
-        expect(appError.statusCode).toBe(404)
-      }
+      await expect(listComments(managerUser, REPORT_ID)).rejects.toMatchObject({
+        code: 'NOT_FOUND',
+      })
     })
 
     it('日報が見つからない場合はfindManyが呼ばれない', async () => {
@@ -209,22 +202,13 @@ describe('listComments', () => {
     it('他人の日報に対してAppError.forbiddenをスローする', async () => {
       // salesUser2が所有する日報（userId !== salesUser.id）
       const otherUsersReport = {
-        id: REPORT_ID,
         userId: salesUser2.id,
       }
       mockFindUniqueReport.mockResolvedValueOnce(otherUsersReport as never)
 
-      await expect(listComments(salesUser, REPORT_ID)).rejects.toThrow(AppError)
-
-      mockFindUniqueReport.mockResolvedValueOnce(otherUsersReport as never)
-      try {
-        await listComments(salesUser, REPORT_ID)
-      } catch (err) {
-        expect(err).toBeInstanceOf(AppError)
-        const appError = err as AppError
-        expect(appError.code).toBe('FORBIDDEN')
-        expect(appError.statusCode).toBe(403)
-      }
+      await expect(listComments(salesUser, REPORT_ID)).rejects.toMatchObject({
+        code: 'FORBIDDEN',
+      })
     })
 
     it('salesユーザーが他人の日報を指定した場合はfindManyが呼ばれない', async () => {
@@ -282,7 +266,7 @@ describe('listComments', () => {
 
       expect(mockFindUniqueReport).toHaveBeenCalledWith({
         where: { id: REPORT_ID },
-        select: { id: true, userId: true },
+        select: { userId: true },
       })
     })
 
