@@ -266,10 +266,12 @@ export async function updateReport(
     throw AppError.forbidden()
   }
 
-  const report = await prisma.$transaction(async (tx) => {
-    await tx.visitRecord.deleteMany({ where: { dailyReportId: reportId } })
+  let report
+  try {
+    report = await prisma.$transaction(async (tx) => {
+      await tx.visitRecord.deleteMany({ where: { dailyReportId: reportId } })
 
-    return tx.dailyReport.update({
+      return tx.dailyReport.update({
       where: { id: reportId },
       data: {
         problem: input.problem,
@@ -305,6 +307,13 @@ export async function updateReport(
       },
     })
   })
+  } catch (err) {
+    // Race condition: report was deleted between the ownership check and the update
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      throw AppError.notFound('日報')
+    }
+    throw err
+  }
 
   return {
     id: report.id,

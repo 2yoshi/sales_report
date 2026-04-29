@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth/guard'
 import { getReport, updateReport } from '@/lib/reports/reports.service'
-import { handleError, formatZodError } from '@/lib/errors'
+import { handleError } from '@/lib/errors'
 import { AppError } from '@/lib/errors/AppError'
 import { updateReportSchema } from '@/lib/schemas/report.schema'
 import type { AuthUser } from '@/types'
@@ -43,13 +43,15 @@ async function handlePutReport(
       throw AppError.notFound('日報')
     }
 
-    const body: unknown = await req.json()
-    const parsed = updateReportSchema.safeParse(body)
-    if (!parsed.success) {
-      throw formatZodError(parsed.error)
+    let body: unknown
+    try {
+      body = await req.json()
+    } catch {
+      throw AppError.validationError('リクエストボディが不正なJSON形式です')
     }
 
-    const data = await updateReport(user, reportId, parsed.data)
+    const input = updateReportSchema.parse(body)
+    const data = await updateReport(user, reportId, input)
     return NextResponse.json({ data })
   } catch (err) {
     return handleError(err)

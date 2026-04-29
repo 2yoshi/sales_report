@@ -150,6 +150,17 @@ function makePutRequestWithoutAuth(reportId = REPORT_ID): NextRequest {
   })
 }
 
+function makePutRequestWithInvalidJson(user: AuthUser, reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: 'not-valid-json{',
+  })
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('GET /api/reports/:id', () => {
@@ -529,6 +540,16 @@ describe('PUT /api/reports/:id', () => {
     it('problemが欠けている場合は400とVALIDATION_ERRORを返す', async () => {
       const { problem: _omit, ...bodyWithoutProblem } = validUpdateBody
       const req = makePutRequest(salesUser, bodyWithoutProblem)
+      const res = await PUT(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockUpdateReport).not.toHaveBeenCalled()
+    })
+
+    it('不正なJSONボディの場合は400とVALIDATION_ERRORを返す', async () => {
+      const req = makePutRequestWithInvalidJson(salesUser)
       const res = await PUT(req, makeContext())
       const body = await res.json()
 

@@ -861,4 +861,38 @@ describe('updateReport', () => {
       expect(mockTransaction).not.toHaveBeenCalled()
     })
   })
+
+  // ── Race condition ────────────────────────────────────────────────────────
+
+  describe('レースコンディション', () => {
+    it('トランザクション内でP2025が発生した場合はNOT_FOUNDをスローする', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 0 })
+      const p2025 = new Prisma.PrismaClientKnownRequestError('Record to update not found', {
+        code: 'P2025',
+        clientVersion: '5.0.0',
+      })
+      mockUpdate.mockRejectedValueOnce(p2025)
+
+      await expect(
+        updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+      mockFindUnique.mockResolvedValueOnce({ userId: salesUser.id } as never)
+      mockTransaction.mockImplementation(async (fn) => fn(prisma))
+      mockDeleteMany.mockResolvedValueOnce({ count: 0 })
+      const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+        code: 'P2002',
+        clientVersion: '5.0.0',
+      })
+      mockUpdate.mockRejectedValueOnce(p2002)
+
+      await expect(
+        updateReport(salesUser, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', updateInput),
+      ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+    })
+  })
 })
