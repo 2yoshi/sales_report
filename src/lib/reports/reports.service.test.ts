@@ -1061,135 +1061,135 @@ describe('deleteReport', () => {
 })
 
 describe('getVisitRecords', () => {
-    const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const reportId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
 
-    function makePrismaReportWithVisitRecords(userId: string) {
-      return {
-        userId,
-        visitRecords: [
-          {
-            id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-            content: '商談内容',
-            sortOrder: 1,
-            customer: {
-              id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
-              name: '佐藤 健',
-              company: '株式会社A',
-            },
-          },
-          {
-            id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
-            content: '定例ミーティング',
-            sortOrder: 2,
-            customer: {
-              id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-              name: '田中 花子',
-              company: null,
-            },
-          },
-        ],
-      }
-    }
-
-    it('日報が存在しない場合はNOT_FOUNDをスローする', async () => {
-      mockFindUnique.mockResolvedValueOnce(null)
-
-      await expect(getVisitRecords(salesUser, reportId)).rejects.toMatchObject({
-        code: 'NOT_FOUND',
-      })
-    })
-
-    it('salesユーザーが他人の日報にアクセスした場合はFORBIDDENをスローする', async () => {
-      mockFindUnique.mockResolvedValueOnce(
-        makePrismaReportWithVisitRecords(salesUser2.id) as never,
-      )
-
-      await expect(getVisitRecords(salesUser, reportId)).rejects.toMatchObject({
-        code: 'FORBIDDEN',
-      })
-    })
-
-    it('salesユーザーが自分の日報の訪問記録一覧を取得できる', async () => {
-      mockFindUnique.mockResolvedValueOnce(
-        makePrismaReportWithVisitRecords(salesUser.id) as never,
-      )
-
-      const result = await getVisitRecords(salesUser, reportId)
-
-      expect(result).toEqual([
+  function makePrismaReportWithVisitRecords(userId: string) {
+    return {
+      userId,
+      visitRecords: [
         {
           id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+          content: '商談内容',
+          sortOrder: 1,
           customer: {
             id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
             name: '佐藤 健',
             company: '株式会社A',
           },
-          content: '商談内容',
-          sort_order: 1,
         },
         {
           id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+          content: '定例ミーティング',
+          sortOrder: 2,
           customer: {
             id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
             name: '田中 花子',
             company: null,
           },
-          content: '定例ミーティング',
-          sort_order: 2,
         },
-      ])
-    })
+      ],
+    }
+  }
 
-    it('managerユーザーが任意の日報の訪問記録一覧を取得できる', async () => {
-      mockFindUnique.mockResolvedValueOnce(
-        makePrismaReportWithVisitRecords(salesUser.id) as never,
-      )
+  it('日報が存在しない場合はNOT_FOUNDをスローする', async () => {
+    mockFindUnique.mockResolvedValueOnce(null)
 
-      const result = await getVisitRecords(managerUser, reportId)
-
-      expect(result).toHaveLength(2)
-      expect(result[0].sort_order).toBe(1)
-      expect(result[1].sort_order).toBe(2)
-    })
-
-    it('adminユーザーが任意の日報の訪問記録一覧を取得できる', async () => {
-      mockFindUnique.mockResolvedValueOnce(
-        makePrismaReportWithVisitRecords(salesUser.id) as never,
-      )
-
-      const result = await getVisitRecords(adminUser, reportId)
-
-      expect(result).toHaveLength(2)
-    })
-
-    it('sort_orderの昇順でソートするためorderByが正しく渡される', async () => {
-      mockFindUnique.mockResolvedValueOnce(
-        makePrismaReportWithVisitRecords(salesUser.id) as never,
-      )
-
-      await getVisitRecords(salesUser, reportId)
-
-      expect(mockFindUnique).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: reportId },
-          select: expect.objectContaining({
-            visitRecords: expect.objectContaining({
-              orderBy: { sortOrder: 'asc' },
-            }),
-          }),
-        }),
-      )
-    })
-
-    it('訪問記録が空の場合は空配列を返す', async () => {
-      mockFindUnique.mockResolvedValueOnce({
-        userId: salesUser.id,
-        visitRecords: [],
-      } as never)
-
-      const result = await getVisitRecords(salesUser, reportId)
-
-      expect(result).toEqual([])
+    await expect(getVisitRecords(salesUser, reportId)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
     })
   })
+
+  it('salesユーザーが他人の日報にアクセスした場合はFORBIDDENをスローする', async () => {
+    mockFindUnique.mockResolvedValueOnce(
+      makePrismaReportWithVisitRecords(salesUser2.id) as never,
+    )
+
+    await expect(getVisitRecords(salesUser, reportId)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('salesユーザーが自分の日報の訪問記録一覧を取得できる', async () => {
+    mockFindUnique.mockResolvedValueOnce(
+      makePrismaReportWithVisitRecords(salesUser.id) as never,
+    )
+
+    const result = await getVisitRecords(salesUser, reportId)
+
+    expect(result).toEqual([
+      {
+        id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+        customer: {
+          id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+          name: '佐藤 健',
+          company: '株式会社A',
+        },
+        content: '商談内容',
+        sort_order: 1,
+      },
+      {
+        id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
+        customer: {
+          id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+          name: '田中 花子',
+          company: null,
+        },
+        content: '定例ミーティング',
+        sort_order: 2,
+      },
+    ])
+  })
+
+  it('managerユーザーが任意の日報の訪問記録一覧を取得できる', async () => {
+    mockFindUnique.mockResolvedValueOnce(
+      makePrismaReportWithVisitRecords(salesUser.id) as never,
+    )
+
+    const result = await getVisitRecords(managerUser, reportId)
+
+    expect(result).toHaveLength(2)
+    expect(result[0].sort_order).toBe(1)
+    expect(result[1].sort_order).toBe(2)
+  })
+
+  it('adminユーザーが任意の日報の訪問記録一覧を取得できる', async () => {
+    mockFindUnique.mockResolvedValueOnce(
+      makePrismaReportWithVisitRecords(salesUser.id) as never,
+    )
+
+    const result = await getVisitRecords(adminUser, reportId)
+
+    expect(result).toHaveLength(2)
+  })
+
+  it('sort_orderの昇順でソートするためorderByが正しく渡される', async () => {
+    mockFindUnique.mockResolvedValueOnce(
+      makePrismaReportWithVisitRecords(salesUser.id) as never,
+    )
+
+    await getVisitRecords(salesUser, reportId)
+
+    expect(mockFindUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: reportId },
+        select: expect.objectContaining({
+          visitRecords: expect.objectContaining({
+            orderBy: { sortOrder: 'asc' },
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('訪問記録が空の場合は空配列を返す', async () => {
+    mockFindUnique.mockResolvedValueOnce({
+      userId: salesUser.id,
+      visitRecords: [],
+    } as never)
+
+    const result = await getVisitRecords(salesUser, reportId)
+
+    expect(result).toEqual([])
+  })
+})
 
