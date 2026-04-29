@@ -1,6 +1,8 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
-import type { ListReportsQuery } from '@/lib/schemas/report.schema'
+import type { ListReportsQuery, CreateReportInput } from '@/lib/schemas/report.schema'
 
 export interface ReportListItem {
   id: string
@@ -25,6 +27,9 @@ export interface ReportListItem {
   created_at: string
   updated_at: string
 }
+
+// POST /reports レスポンス型（ReportListItemと同形。GET /reports/:idのReportDetailとは別定義）
+export type CreateReportResult = ReportListItem
 
 export interface ListReportsResult {
   data: ReportListItem[]
@@ -121,5 +126,91 @@ export async function listReports(
   return {
     data,
     meta: { total, page, per_page },
+  }
+}
+
+export async function createReport(
+  user: AuthUser,
+  input: CreateReportInput,
+): Promise<CreateReportResult> {
+  const reportDate = new Date(input.report_date)
+
+  // Early duplicate check: same user + same date (common path)
+  const existing = await prisma.dailyReport.findUnique({
+    where: {
+      userId_reportDate: {
+        userId: user.id,
+        reportDate,
+      },
+    },
+  })
+  if (existing) {
+    throw AppError.duplicateReport()
+  }
+
+  // Nested create is atomic — no explicit transaction needed
+  let report
+  try {
+    report = await prisma.dailyReport.create({
+      data: {
+        userId: user.id,
+        reportDate,
+        problem: input.problem,
+        plan: input.plan,
+        visitRecords: {
+          create: input.visit_records.map((vr) => ({
+            customerId: vr.customer_id,
+            content: vr.content,
+            sortOrder: vr.sort_order,
+          })),
+        },
+      },
+      include: {
+        user: {
+          select: { id: true, name: true },
+        },
+        visitRecords: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            customer: {
+              select: { id: true, name: true, company: true },
+            },
+          },
+        },
+        _count: {
+          select: { comments: true },
+        },
+      },
+    })
+  } catch (err) {
+    // Race condition: another request inserted the same user+date between our check and insert
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      throw AppError.duplicateReport()
+    }
+    throw err
+  }
+
+  return {
+    id: report.id,
+    report_date: report.reportDate.toISOString().slice(0, 10),
+    problem: report.problem,
+    plan: report.plan,
+    user: {
+      id: report.user.id,
+      name: report.user.name,
+    },
+    visit_records: report.visitRecords.map((vr) => ({
+      id: vr.id,
+      customer: {
+        id: vr.customer.id,
+        name: vr.customer.name,
+        company: vr.customer.company,
+      },
+      content: vr.content,
+      sort_order: vr.sortOrder,
+    })),
+    comments_count: report._count.comments,
+    created_at: report.createdAt.toISOString(),
+    updated_at: report.updatedAt.toISOString(),
   }
 }

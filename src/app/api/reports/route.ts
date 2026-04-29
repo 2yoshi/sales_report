@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth/guard'
-import { listReportsQuerySchema } from '@/lib/schemas/report.schema'
-import { listReports } from '@/lib/reports/reports.service'
+import { listReportsQuerySchema, createReportSchema } from '@/lib/schemas/report.schema'
+import { listReports, createReport } from '@/lib/reports/reports.service'
 import { handleError } from '@/lib/errors'
 import type { AuthUser } from '@/types'
 
@@ -39,3 +39,20 @@ async function handleGetReports(
 }
 
 export const GET = withAuth(handleGetReports)
+
+async function handlePostReport(
+  req: NextRequest,
+  _context: Record<string, unknown>,
+  user: AuthUser,
+): Promise<NextResponse> {
+  try {
+    const body: unknown = await req.json()
+    const input = createReportSchema.parse(body)
+    const report = await createReport(user, input)
+    return NextResponse.json({ data: report }, { status: 201 })
+  } catch (err) {
+    return handleError(err)
+  }
+}
+
+export const POST = withAuth(handlePostReport, ['sales'])
