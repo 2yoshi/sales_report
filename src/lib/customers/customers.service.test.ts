@@ -274,7 +274,19 @@ describe('deleteCustomer', () => {
     await expect(deleteCustomer(CUSTOMER_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 
-  it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+  it('削除時にP2003が発生した場合はCUSTOMER_IN_USEをスローする（レースコンディション）', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
+    mockVisitRecordCount.mockResolvedValueOnce(0)
+    const p2003 = new Prisma.PrismaClientKnownRequestError('Foreign key constraint failed.', {
+      code: 'P2003',
+      clientVersion: '5.0.0',
+    })
+    mockDelete.mockRejectedValueOnce(p2003)
+
+    await expect(deleteCustomer(CUSTOMER_ID)).rejects.toMatchObject({ code: 'CUSTOMER_IN_USE' })
+  })
+
+  it('P2025/P2003以外のPrismaエラーはそのまま再スローされる', async () => {
     mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
     mockVisitRecordCount.mockResolvedValueOnce(0)
     const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {

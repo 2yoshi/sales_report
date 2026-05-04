@@ -149,9 +149,11 @@ export async function deleteCustomer(customerId: string): Promise<void> {
   try {
     await prisma.customer.delete({ where: { id: customerId } })
   } catch (err) {
-    // Race condition: customer was deleted between our check and delete
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
-      throw AppError.notFound('顧客')
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      // Race condition: customer was deleted between our check and delete
+      if (err.code === 'P2025') throw AppError.notFound('顧客')
+      // Race condition: visit record was added between our count check and delete
+      if (err.code === 'P2003') throw AppError.customerInUse()
     }
     throw err
   }
