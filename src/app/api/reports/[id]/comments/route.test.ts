@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { GET } from './route'
+import { GET, POST } from './route'
 import * as commentsService from '@/lib/reports/comments.service'
 import { generateToken } from '@/lib/auth/jwt'
 import { AppError } from '@/lib/errors/AppError'
@@ -9,6 +9,7 @@ import type { CommentItem } from '@/lib/reports/comments.service'
 
 vi.mock('@/lib/reports/comments.service', () => ({
   listComments: vi.fn(),
+  createComment: vi.fn(),
 }))
 
 // Mock the blacklist so tokens are never invalidated in tests
@@ -17,6 +18,7 @@ vi.mock('@/lib/auth/blacklist', () => ({
 }))
 
 const mockListComments = vi.mocked(commentsService.listComments)
+const mockCreateComment = vi.mocked(commentsService.createComment)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -239,6 +241,206 @@ describe('GET /api/reports/:id/comments', () => {
 
       const req = makeRequest(salesUser)
       const res = await GET(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(500)
+      expect(body.error.code).toBe('INTERNAL_SERVER_ERROR')
+    })
+  })
+})
+
+// ─── POST /api/reports/:id/comments ───────────────────────────────────────────
+
+const validCommentBody = { body: 'コメント本文' }
+
+const sampleCreatedComment: CommentItem = {
+  id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+  body: 'コメント本文',
+  commenter: {
+    id: managerUser.id,
+    name: managerUser.name,
+    role: 'manager',
+  },
+  created_at: '2026-04-19T18:45:00.000Z',
+  updated_at: '2026-04-19T18:45:00.000Z',
+}
+
+function makePostRequest(
+  user: AuthUser,
+  body: unknown = validCommentBody,
+  reportId = REPORT_ID,
+): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}/comments`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  })
+}
+
+function makePostRequestWithoutAuth(reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(validCommentBody),
+  })
+}
+
+function makePostRequestWithInvalidJson(user: AuthUser, reportId = REPORT_ID): NextRequest {
+  return new NextRequest(`http://localhost/api/reports/${reportId}/comments`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${generateToken(user)}`,
+      'Content-Type': 'application/json',
+    },
+    body: 'not-valid-json{',
+  })
+}
+
+describe('POST /api/reports/:id/comments', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── 認証 ──────────────────────────────────────────────────────────────────
+
+  describe('認証', () => {
+    it('Authorizationヘッダーがない場合は401を返す', async () => {
+      const req = makePostRequestWithoutAuth()
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(401)
+      expect(body.error.code).toBe('UNAUTHORIZED')
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── API-032: managerが正常投稿 → 201 ──────────────────────────────────────
+
+  describe('API-032: managerが正常にコメントを投稿できる', () => {
+    it('201とCommentItemを返す', async () => {
+      mockCreateComment.mockResolvedValueOnce(sampleCreatedComment)
+
+      const req = makePostRequest(managerUser)
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(201)
+      expect(body.data.id).toBe('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee')
+      expect(body.data.body).toBe('コメント本文')
+      expect(body.data.commenter.id).toBe(managerUser.id)
+      expect(body.data.commenter.name).toBe(managerUser.name)
+      expect(body.data.commenter.role).toBe('manager')
+      expect(body.data.created_at).toBe('2026-04-19T18:45:00.000Z')
+      expect(mockCreateComment).toHaveBeenCalledWith(managerUser, REPORT_ID, validCommentBody)
+    })
+  })
+
+  // ── adminも投稿可 → 201 ────────────────────────────────────────────────────
+
+  describe('adminも正常にコメントを投稿できる', () => {
+    it('201とCommentItemを返す', async () => {
+      const adminComment: CommentItem = { ...sampleCreatedComment, commenter: { id: adminUser.id, name: adminUser.name, role: 'admin' } }
+      mockCreateComment.mockResolvedValueOnce(adminComment)
+
+      const req = makePostRequest(adminUser)
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(201)
+      expect(body.data.commenter.role).toBe('admin')
+      expect(mockCreateComment).toHaveBeenCalledWith(adminUser, REPORT_ID, validCommentBody)
+    })
+  })
+
+  // ── API-033: salesトークン → 403 ──────────────────────────────────────────
+
+  describe('API-033: salesユーザーがコメント投稿しようとすると403を返す', () => {
+    it('403とFORBIDDENコードを返す', async () => {
+      const req = makePostRequest(salesUser)
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── UUID形式でないID → 404 ────────────────────────────────────────────────
+
+  describe('UUID形式でないIDを指定すると404を返す', () => {
+    it('404とNOT_FOUNDコードを返し、サービスは呼ばれない', async () => {
+      const req = makePostRequest(managerUser, validCommentBody, 'not-a-uuid')
+      const res = await POST(req, makeContext('not-a-uuid'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── 存在しない日報ID → 404 ───────────────────────────────────────────────
+
+  describe('存在しない日報IDを指定すると404を返す', () => {
+    it('サービスがNOT_FOUNDをスローした場合に404を返す', async () => {
+      mockCreateComment.mockRejectedValueOnce(AppError.notFound('日報'))
+
+      const req = makePostRequest(managerUser, validCommentBody, 'ffffffff-ffff-ffff-ffff-ffffffffffff')
+      const res = await POST(req, makeContext('ffffffff-ffff-ffff-ffff-ffffffffffff'))
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+    })
+  })
+
+  // ── バリデーションエラー → 400 ───────────────────────────────────────────
+
+  describe('バリデーションエラー', () => {
+    it('bodyが空の場合は400とVALIDATION_ERRORを返す', async () => {
+      const req = makePostRequest(managerUser, { body: '' })
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+
+    it('bodyが2001文字の場合は400とVALIDATION_ERRORを返す', async () => {
+      const req = makePostRequest(managerUser, { body: 'a'.repeat(2001) })
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+
+    it('不正なJSONボディの場合は400とVALIDATION_ERRORを返す', async () => {
+      const req = makePostRequestWithInvalidJson(managerUser)
+      const res = await POST(req, makeContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── エラーハンドリング ────────────────────────────────────────────────────
+
+  describe('エラーハンドリング', () => {
+    it('サービスが予期しないエラーを投げた場合は500を返す', async () => {
+      mockCreateComment.mockRejectedValueOnce(new Error('Database connection failed'))
+
+      const req = makePostRequest(managerUser)
+      const res = await POST(req, makeContext())
       const body = await res.json()
 
       expect(res.status).toBe(500)

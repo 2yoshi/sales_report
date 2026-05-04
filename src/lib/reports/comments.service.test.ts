@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listComments } from './comments.service'
+import { listComments, createComment } from './comments.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
+import { Prisma } from '@prisma/client'
 import type { AuthUser } from '@/types'
 
 vi.mock('@/lib/prisma', () => ({
@@ -11,12 +12,14 @@ vi.mock('@/lib/prisma', () => ({
     },
     comment: {
       findMany: vi.fn(),
+      create: vi.fn(),
     },
   },
 }))
 
 const mockFindUniqueReport = vi.mocked(prisma.dailyReport.findUnique)
 const mockFindManyComments = vi.mocked(prisma.comment.findMany)
+const mockCreateComment = vi.mocked(prisma.comment.create)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -285,6 +288,112 @@ describe('listComments', () => {
           },
         },
       })
+    })
+  })
+})
+
+// ─── createComment ────────────────────────────────────────────────────────────
+
+const createInput = { body: 'コメント本文' }
+
+function makePrismaCreatedComment() {
+  return {
+    id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+    dailyReportId: REPORT_ID,
+    commenterId: managerUser.id,
+    body: 'コメント本文',
+    createdAt: new Date('2026-04-19T18:45:00.000Z'),
+    updatedAt: new Date('2026-04-19T18:45:00.000Z'),
+    commenter: {
+      id: managerUser.id,
+      name: managerUser.name,
+      role: 'manager' as const,
+    },
+  }
+}
+
+describe('createComment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── 正常系 ────────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('managerが日報にコメントを投稿できCommentItemを返す', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      mockCreateComment.mockResolvedValueOnce(makePrismaCreatedComment() as never)
+
+      const result = await createComment(managerUser, REPORT_ID, createInput)
+
+      expect(result.id).toBe('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee')
+      expect(result.body).toBe('コメント本文')
+      expect(result.commenter.id).toBe(managerUser.id)
+      expect(result.commenter.name).toBe(managerUser.name)
+      expect(result.commenter.role).toBe('manager')
+      expect(result.created_at).toBe('2026-04-19T18:45:00.000Z')
+      expect(result.updated_at).toBe('2026-04-19T18:45:00.000Z')
+    })
+
+    it('prisma.comment.createに正しいデータが渡される', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      mockCreateComment.mockResolvedValueOnce(makePrismaCreatedComment() as never)
+
+      await createComment(managerUser, REPORT_ID, createInput)
+
+      expect(mockCreateComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            dailyReportId: REPORT_ID,
+            commenterId: managerUser.id,
+            body: 'コメント本文',
+          },
+        }),
+      )
+    })
+  })
+
+  // ── 日報が存在しない → NOT_FOUND ─────────────────────────────────────────
+
+  describe('NOT_FOUND: 日報が存在しない場合', () => {
+    it('AppError(NOT_FOUND)をスローする', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce(null as never)
+
+      await expect(
+        createComment(managerUser, REPORT_ID, createInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── レースコンディション（P2003）→ NOT_FOUND ─────────────────────────────
+
+  describe('レースコンディション: P2003（外部キー制約違反）', () => {
+    it('日報が削除されていた場合はNOT_FOUNDをスローする', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      const p2003 = new Prisma.PrismaClientKnownRequestError(
+        'Foreign key constraint failed',
+        { code: 'P2003', clientVersion: '5.0.0' },
+      )
+      mockCreateComment.mockRejectedValueOnce(p2003)
+
+      await expect(
+        createComment(managerUser, REPORT_ID, createInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('P2003以外のPrismaエラーはそのまま再スローされる', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      const p2002 = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      )
+      mockCreateComment.mockRejectedValueOnce(p2002)
+
+      await expect(
+        createComment(managerUser, REPORT_ID, createInput),
+      ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
     })
   })
 })
