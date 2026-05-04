@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { NextRequest } from 'next/server'
-import { GET, PUT } from './route'
+import { GET, PUT, DELETE } from './route'
 import * as customersService from '@/lib/customers/customers.service'
 import { generateToken } from '@/lib/auth/jwt'
 import { AppError } from '@/lib/errors/AppError'
@@ -10,6 +10,7 @@ import type { CustomerItem } from '@/lib/customers/customers.service'
 vi.mock('@/lib/customers/customers.service', () => ({
   getCustomer: vi.fn(),
   updateCustomer: vi.fn(),
+  deleteCustomer: vi.fn(),
 }))
 
 vi.mock('@/lib/auth/blacklist', () => ({
@@ -18,6 +19,7 @@ vi.mock('@/lib/auth/blacklist', () => ({
 
 const mockGetCustomer = vi.mocked(customersService.getCustomer)
 const mockUpdateCustomer = vi.mocked(customersService.updateCustomer)
+const mockDeleteCustomer = vi.mocked(customersService.deleteCustomer)
 
 // ─── Test users ──────────────────────────────────────────────────────────────
 
@@ -266,6 +268,110 @@ describe('PUT /api/customers/[id]', () => {
 
       expect(res.status).toBe(500)
       expect(body.error.code).toBe('INTERNAL_SERVER_ERROR')
+    })
+  })
+})
+
+// ─── DELETE /api/customers/:id ────────────────────────────────────────────────
+
+describe('DELETE /api/customers/:id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  function makeDeleteRequest(user: AuthUser, customerId = CUSTOMER_ID): NextRequest {
+    return new NextRequest(`http://localhost/api/customers/${customerId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${generateToken(user)}` },
+    })
+  }
+
+  // ── 認証 ──────────────────────────────────────────────────────────────────
+
+  describe('認証', () => {
+    it('Authorizationヘッダーがない場合は401を返す', async () => {
+      const req = new NextRequest(`http://localhost/api/customers/${CUSTOMER_ID}`, {
+        method: 'DELETE',
+      })
+      const res = await DELETE(req, { params: { id: CUSTOMER_ID } })
+      const body = await res.json()
+
+      expect(res.status).toBe(401)
+      expect(body.error.code).toBe('UNAUTHORIZED')
+    })
+
+    it('admin以外（sales）は403を返す', async () => {
+      const req = makeDeleteRequest(salesUser)
+      const res = await DELETE(req, { params: { id: CUSTOMER_ID } })
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+      expect(mockDeleteCustomer).not.toHaveBeenCalled()
+    })
+
+    it('admin以外（manager）は403を返す', async () => {
+      const req = makeDeleteRequest(managerUser)
+      const res = await DELETE(req, { params: { id: CUSTOMER_ID } })
+      const body = await res.json()
+
+      expect(res.status).toBe(403)
+      expect(body.error.code).toBe('FORBIDDEN')
+      expect(mockDeleteCustomer).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── UUID バリデーション ────────────────────────────────────────────────────
+
+  describe('IDバリデーション', () => {
+    it('UUID形式でないIDは404を返す', async () => {
+      const req = makeDeleteRequest(adminUser, 'not-a-uuid')
+      const res = await DELETE(req, { params: { id: 'not-a-uuid' } })
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+      expect(mockDeleteCustomer).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── 正常系 ────────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('adminが顧客を削除すると204を返す', async () => {
+      mockDeleteCustomer.mockResolvedValueOnce(undefined)
+
+      const req = makeDeleteRequest(adminUser)
+      const res = await DELETE(req, { params: { id: CUSTOMER_ID } })
+
+      expect(res.status).toBe(204)
+      expect(mockDeleteCustomer).toHaveBeenCalledWith(CUSTOMER_ID)
+    })
+  })
+
+  // ── 異常系 ────────────────────────────────────────────────────────────────
+
+  describe('異常系', () => {
+    it('顧客が存在しない場合は404を返す', async () => {
+      mockDeleteCustomer.mockRejectedValueOnce(AppError.notFound('顧客'))
+
+      const req = makeDeleteRequest(adminUser)
+      const res = await DELETE(req, { params: { id: CUSTOMER_ID } })
+      const body = await res.json()
+
+      expect(res.status).toBe(404)
+      expect(body.error.code).toBe('NOT_FOUND')
+    })
+
+    it('訪問記録に紐づいている顧客は409を返す', async () => {
+      mockDeleteCustomer.mockRejectedValueOnce(AppError.customerInUse())
+
+      const req = makeDeleteRequest(adminUser)
+      const res = await DELETE(req, { params: { id: CUSTOMER_ID } })
+      const body = await res.json()
+
+      expect(res.status).toBe(409)
+      expect(body.error.code).toBe('CUSTOMER_IN_USE')
     })
   })
 })

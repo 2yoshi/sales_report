@@ -127,3 +127,34 @@ export async function updateCustomer(
     throw err
   }
 }
+
+export async function deleteCustomer(customerId: string): Promise<void> {
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true },
+  })
+
+  if (!customer) {
+    throw AppError.notFound('顧客')
+  }
+
+  const visitRecordCount = await prisma.visitRecord.count({
+    where: { customerId },
+  })
+
+  if (visitRecordCount > 0) {
+    throw AppError.customerInUse()
+  }
+
+  try {
+    await prisma.customer.delete({ where: { id: customerId } })
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError) {
+      // Race condition: customer was deleted between our check and delete
+      if (err.code === 'P2025') throw AppError.notFound('顧客')
+      // Race condition: visit record was added between our count check and delete
+      if (err.code === 'P2003') throw AppError.customerInUse()
+    }
+    throw err
+  }
+}
