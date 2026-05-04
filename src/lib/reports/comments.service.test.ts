@@ -321,7 +321,7 @@ describe('createComment', () => {
 
   describe('正常系', () => {
     it('managerが日報にコメントを投稿できCommentItemを返す', async () => {
-      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
       mockCreateComment.mockResolvedValueOnce(makePrismaCreatedComment() as never)
 
       const result = await createComment(managerUser, REPORT_ID, createInput)
@@ -336,7 +336,7 @@ describe('createComment', () => {
     })
 
     it('prisma.comment.createに正しいデータが渡される', async () => {
-      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
       mockCreateComment.mockResolvedValueOnce(makePrismaCreatedComment() as never)
 
       await createComment(managerUser, REPORT_ID, createInput)
@@ -371,7 +371,7 @@ describe('createComment', () => {
 
   describe('レースコンディション: P2003（外部キー制約違反）', () => {
     it('日報が削除されていた場合はNOT_FOUNDをスローする', async () => {
-      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
       const p2003 = new Prisma.PrismaClientKnownRequestError(
         'Foreign key constraint failed',
         { code: 'P2003', clientVersion: '5.0.0' },
@@ -384,7 +384,7 @@ describe('createComment', () => {
     })
 
     it('P2003以外のPrismaエラーはそのまま再スローされる', async () => {
-      mockFindUniqueReport.mockResolvedValueOnce({ id: REPORT_ID } as never)
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
       const p2002 = new Prisma.PrismaClientKnownRequestError(
         'Unique constraint failed',
         { code: 'P2002', clientVersion: '5.0.0' },

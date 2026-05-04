@@ -62,7 +62,7 @@ export async function createComment(
   // Verify the report exists
   const report = await prisma.dailyReport.findUnique({
     where: { id: reportId },
-    select: { id: true },
+    select: { userId: true },
   })
 
   if (!report) {
