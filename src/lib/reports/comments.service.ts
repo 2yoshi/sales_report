@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser, UserRole } from '@/types'
@@ -50,4 +51,39 @@ export async function listComments(user: AuthUser, reportId: string): Promise<Co
     created_at: c.createdAt.toISOString(),
     updated_at: c.updatedAt.toISOString(),
   }))
+}
+
+export async function deleteComment(
+  user: AuthUser,
+  reportId: string,
+  commentId: string,
+): Promise<void> {
+  const comment = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { commenterId: true, dailyReportId: true },
+  })
+
+  if (!comment || comment.dailyReportId !== reportId) {
+    throw AppError.notFound('コメント')
+  }
+
+  // sales cannot delete any comment
+  if (user.role === 'sales') {
+    throw AppError.forbidden()
+  }
+
+  // admin can delete any comment; manager can only delete their own
+  if (user.role !== 'admin' && comment.commenterId !== user.id) {
+    throw AppError.forbidden()
+  }
+
+  try {
+    await prisma.comment.delete({ where: { id: commentId } })
+  } catch (err) {
+    // Race condition: another request deleted the comment between our check and delete
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      throw AppError.notFound('コメント')
+    }
+    throw err
+  }
 }
