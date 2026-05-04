@@ -20,6 +20,7 @@ export default function ProtectedLayout({
       logout()
       router.push('/login')
     })
+    return () => setOnUnauthorized(() => {})
   }, [logout, router])
 
   useEffect(() => {

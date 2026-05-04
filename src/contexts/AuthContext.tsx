@@ -7,9 +7,9 @@ import {
   useEffect,
   useState,
 } from 'react'
+import { TOKEN_KEY } from '@/lib/api-client'
 import type { AuthUser } from '@/types'
 
-const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
 
 interface AuthContextValue {

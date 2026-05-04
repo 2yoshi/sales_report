@@ -1,6 +1,6 @@
 import type { ApiError } from '@/types'
 
-const TOKEN_KEY = 'auth_token'
+export const TOKEN_KEY = 'auth_token'
 
 export class ApiClientError extends Error {
   constructor(
