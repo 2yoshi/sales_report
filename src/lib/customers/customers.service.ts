@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import type { CreateCustomerInput, UpdateCustomerInput, ListCustomersQuery } from '@/lib/schemas/customer.schema'
@@ -107,15 +108,22 @@ export async function updateCustomer(
     throw AppError.notFound('顧客')
   }
 
-  const customer = await prisma.customer.update({
-    where: { id: customerId },
-    data: {
-      name: input.name,
-      company: input.company,
-      phone: input.phone,
-      email: input.email,
-    },
-  })
-
-  return formatCustomer(customer)
+  try {
+    const customer = await prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        name: input.name,
+        company: input.company,
+        phone: input.phone,
+        email: input.email,
+      },
+    })
+    return formatCustomer(customer)
+  } catch (err) {
+    // Race condition: customer was deleted between the existence check and the update
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2025') {
+      throw AppError.notFound('顧客')
+    }
+    throw err
+  }
 }

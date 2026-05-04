@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Prisma } from '@prisma/client'
 import { listCustomers, createCustomer, getCustomer, updateCustomer } from './customers.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
@@ -197,6 +198,19 @@ describe('updateCustomer', () => {
 
     await expect(
       updateCustomer('ffffffff-ffff-ffff-ffff-ffffffffffff', { name: '佐藤 次郎' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('レースコンディション: findUniqueとupdateの間に削除された場合は404をスローする', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: customerRecord.id } as never)
+    const p2025Error = new Prisma.PrismaClientKnownRequestError('Record not found', {
+      code: 'P2025',
+      clientVersion: '5.0.0',
+    })
+    mockUpdate.mockRejectedValueOnce(p2025Error)
+
+    await expect(
+      updateCustomer('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', { name: '佐藤 次郎' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 })
