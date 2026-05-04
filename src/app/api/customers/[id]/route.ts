@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/auth/guard'
 import { updateCustomerSchema } from '@/lib/schemas/customer.schema'
-import { getCustomer, updateCustomer } from '@/lib/customers/customers.service'
+import { getCustomer, updateCustomer, deleteCustomer } from '@/lib/customers/customers.service'
 import { handleError } from '@/lib/errors'
 import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
@@ -51,3 +51,24 @@ async function handlePutCustomer(
 }
 
 export const PUT = withAuth(handlePutCustomer)
+
+async function handleDeleteCustomer(
+  _req: NextRequest,
+  context: Record<string, unknown>,
+  _user: AuthUser,
+): Promise<NextResponse> {
+  try {
+    const { id } = context.params as { id: string }
+
+    if (!UUID_REGEX.test(id)) {
+      throw AppError.notFound('顧客')
+    }
+
+    await deleteCustomer(id)
+    return new NextResponse(null, { status: 204 })
+  } catch (err) {
+    return handleError(err)
+  }
+}
+
+export const DELETE = withAuth(handleDeleteCustomer, ['admin'])

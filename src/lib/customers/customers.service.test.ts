@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Prisma } from '@prisma/client'
-import { listCustomers, createCustomer, getCustomer, updateCustomer } from './customers.service'
+import { listCustomers, createCustomer, getCustomer, updateCustomer, deleteCustomer } from './customers.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 
@@ -12,6 +12,10 @@ vi.mock('@/lib/prisma', () => ({
       create: vi.fn(),
       findUnique: vi.fn(),
       update: vi.fn(),
+      delete: vi.fn(),
+    },
+    visitRecord: {
+      count: vi.fn(),
     },
   },
 }))
@@ -21,6 +25,8 @@ const mockFindMany = vi.mocked(prisma.customer.findMany)
 const mockCreate = vi.mocked(prisma.customer.create)
 const mockFindUnique = vi.mocked(prisma.customer.findUnique)
 const mockUpdate = vi.mocked(prisma.customer.update)
+const mockDelete = vi.mocked(prisma.customer.delete)
+const mockVisitRecordCount = vi.mocked(prisma.visitRecord.count)
 
 const now = new Date('2026-04-29T09:00:00.000Z')
 
@@ -212,5 +218,73 @@ describe('updateCustomer', () => {
     await expect(
       updateCustomer('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', { name: '佐藤 次郎' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+})
+
+describe('deleteCustomer', () => {
+  const CUSTOMER_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('顧客が存在しない場合はNOT_FOUNDをスローする', async () => {
+    mockFindUnique.mockResolvedValueOnce(null)
+
+    await expect(deleteCustomer(CUSTOMER_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(mockVisitRecordCount).not.toHaveBeenCalled()
+  })
+
+  it('訪問記録に紐づいている場合はCUSTOMER_IN_USEをスローする', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
+    mockVisitRecordCount.mockResolvedValueOnce(3)
+
+    await expect(deleteCustomer(CUSTOMER_ID)).rejects.toMatchObject({ code: 'CUSTOMER_IN_USE' })
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('参照のない顧客を正常に削除できる', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
+    mockVisitRecordCount.mockResolvedValueOnce(0)
+    mockDelete.mockResolvedValueOnce({} as never)
+
+    await expect(deleteCustomer(CUSTOMER_ID)).resolves.toBeUndefined()
+    expect(mockDelete).toHaveBeenCalledWith({ where: { id: CUSTOMER_ID } })
+  })
+
+  it('visitRecord.countに正しいcustomerIdが渡される', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
+    mockVisitRecordCount.mockResolvedValueOnce(0)
+    mockDelete.mockResolvedValueOnce({} as never)
+
+    await deleteCustomer(CUSTOMER_ID)
+
+    expect(mockVisitRecordCount).toHaveBeenCalledWith({ where: { customerId: CUSTOMER_ID } })
+  })
+
+  it('削除時にP2025が発生した場合はNOT_FOUNDをスローする（レースコンディション）', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
+    mockVisitRecordCount.mockResolvedValueOnce(0)
+    const p2025 = new Prisma.PrismaClientKnownRequestError('Record not found.', {
+      code: 'P2025',
+      clientVersion: '5.0.0',
+    })
+    mockDelete.mockRejectedValueOnce(p2025)
+
+    await expect(deleteCustomer(CUSTOMER_ID)).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+    mockFindUnique.mockResolvedValueOnce({ id: CUSTOMER_ID } as never)
+    mockVisitRecordCount.mockResolvedValueOnce(0)
+    const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+      code: 'P2002',
+      clientVersion: '5.0.0',
+    })
+    mockDelete.mockRejectedValueOnce(p2002)
+
+    await expect(deleteCustomer(CUSTOMER_ID)).rejects.toBeInstanceOf(
+      Prisma.PrismaClientKnownRequestError,
+    )
   })
 })
