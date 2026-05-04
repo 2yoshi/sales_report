@@ -338,6 +338,8 @@ describe('deleteComment', () => {
     await expect(deleteComment(salesUser, REPORT_ID, COMMENT_ID)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     })
+    // salesは自分のコメントが存在する場合でも削除不可（ロールで弾く）
+    expect(mockDeleteComment).not.toHaveBeenCalled()
   })
 
   it('他のmanagerのコメントをmanagerが削除しようとするとFORBIDDENをスローする', async () => {

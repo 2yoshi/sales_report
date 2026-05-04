@@ -67,7 +67,12 @@ export async function deleteComment(
     throw AppError.notFound('コメント')
   }
 
-  // admin can delete any comment; others can only delete their own
+  // sales cannot delete any comment
+  if (user.role === 'sales') {
+    throw AppError.forbidden()
+  }
+
+  // admin can delete any comment; manager can only delete their own
   if (user.role !== 'admin' && comment.commenterId !== user.id) {
     throw AppError.forbidden()
   }
