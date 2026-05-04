@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listComments, deleteComment } from './comments.service'
+import { listComments, createComment, deleteComment } from './comments.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import { Prisma } from '@prisma/client'
@@ -12,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     comment: {
       findMany: vi.fn(),
+      create: vi.fn(),
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
@@ -20,6 +21,7 @@ vi.mock('@/lib/prisma', () => ({
 
 const mockFindUniqueReport = vi.mocked(prisma.dailyReport.findUnique)
 const mockFindManyComments = vi.mocked(prisma.comment.findMany)
+const mockCreateComment = vi.mocked(prisma.comment.create)
 const mockFindUniqueComment = vi.mocked(prisma.comment.findUnique)
 const mockDeleteComment = vi.mocked(prisma.comment.delete)
 
@@ -46,6 +48,13 @@ const managerUser: AuthUser = {
   role: 'manager',
 }
 
+const managerUser2: AuthUser = {
+  id: '55555555-5555-5555-5555-555555555555',
+  name: '佐藤 部長',
+  email: 'sato@test.com',
+  role: 'manager',
+}
+
 const adminUser: AuthUser = {
   id: '44444444-4444-4444-4444-444444444444',
   name: '管理 太郎',
@@ -56,6 +65,7 @@ const adminUser: AuthUser = {
 // ─── Sample data ──────────────────────────────────────────────────────────────
 
 const REPORT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const COMMENT_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
 
 const sampleReport = {
   id: REPORT_ID,
@@ -294,16 +304,113 @@ describe('listComments', () => {
   })
 })
 
-// ─── deleteComment ────────────────────────────────────────────────────────────
+// ─── createComment ────────────────────────────────────────────────────────────
 
-const COMMENT_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+const createInput = { body: 'コメント本文' }
 
-const managerUser2: AuthUser = {
-  id: '55555555-5555-5555-5555-555555555555',
-  name: '佐藤 部長',
-  email: 'sato@test.com',
-  role: 'manager',
+function makePrismaCreatedComment() {
+  return {
+    id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+    dailyReportId: REPORT_ID,
+    commenterId: managerUser.id,
+    body: 'コメント本文',
+    createdAt: new Date('2026-04-19T18:45:00.000Z'),
+    updatedAt: new Date('2026-04-19T18:45:00.000Z'),
+    commenter: {
+      id: managerUser.id,
+      name: managerUser.name,
+      role: 'manager' as const,
+    },
+  }
 }
+
+describe('createComment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // ── 正常系 ────────────────────────────────────────────────────────────────
+
+  describe('正常系', () => {
+    it('managerが日報にコメントを投稿できCommentItemを返す', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
+      mockCreateComment.mockResolvedValueOnce(makePrismaCreatedComment() as never)
+
+      const result = await createComment(managerUser, REPORT_ID, createInput)
+
+      expect(result.id).toBe('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee')
+      expect(result.body).toBe('コメント本文')
+      expect(result.commenter.id).toBe(managerUser.id)
+      expect(result.commenter.name).toBe(managerUser.name)
+      expect(result.commenter.role).toBe('manager')
+      expect(result.created_at).toBe('2026-04-19T18:45:00.000Z')
+      expect(result.updated_at).toBe('2026-04-19T18:45:00.000Z')
+    })
+
+    it('prisma.comment.createに正しいデータが渡される', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
+      mockCreateComment.mockResolvedValueOnce(makePrismaCreatedComment() as never)
+
+      await createComment(managerUser, REPORT_ID, createInput)
+
+      expect(mockCreateComment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            dailyReportId: REPORT_ID,
+            commenterId: managerUser.id,
+            body: 'コメント本文',
+          },
+        }),
+      )
+    })
+  })
+
+  // ── 日報が存在しない → NOT_FOUND ─────────────────────────────────────────
+
+  describe('NOT_FOUND: 日報が存在しない場合', () => {
+    it('AppError(NOT_FOUND)をスローする', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce(null as never)
+
+      await expect(
+        createComment(managerUser, REPORT_ID, createInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+  })
+
+  // ── レースコンディション（P2003）→ NOT_FOUND ─────────────────────────────
+
+  describe('レースコンディション: P2003（外部キー制約違反）', () => {
+    it('日報が削除されていた場合はNOT_FOUNDをスローする', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
+      const p2003 = new Prisma.PrismaClientKnownRequestError(
+        'Foreign key constraint failed',
+        { code: 'P2003', clientVersion: '5.0.0' },
+      )
+      mockCreateComment.mockRejectedValueOnce(p2003)
+
+      await expect(
+        createComment(managerUser, REPORT_ID, createInput),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+
+    it('P2003以外のPrismaエラーはそのまま再スローされる', async () => {
+      mockFindUniqueReport.mockResolvedValueOnce({ userId: managerUser.id } as never)
+      const p2002 = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0' },
+      )
+      mockCreateComment.mockRejectedValueOnce(p2002)
+
+      await expect(
+        createComment(managerUser, REPORT_ID, createInput),
+      ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
+    })
+  })
+})
+
+// ─── deleteComment ────────────────────────────────────────────────────────────
 
 describe('deleteComment', () => {
   beforeEach(() => {
