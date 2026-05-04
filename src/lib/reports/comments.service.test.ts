@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { listComments, createComment } from './comments.service'
+import { listComments, createComment, deleteComment } from './comments.service'
 import { prisma } from '@/lib/prisma'
 import { AppError } from '@/lib/errors/AppError'
 import { Prisma } from '@prisma/client'
@@ -13,6 +13,8 @@ vi.mock('@/lib/prisma', () => ({
     comment: {
       findMany: vi.fn(),
       create: vi.fn(),
+      findUnique: vi.fn(),
+      delete: vi.fn(),
     },
   },
 }))
@@ -20,6 +22,8 @@ vi.mock('@/lib/prisma', () => ({
 const mockFindUniqueReport = vi.mocked(prisma.dailyReport.findUnique)
 const mockFindManyComments = vi.mocked(prisma.comment.findMany)
 const mockCreateComment = vi.mocked(prisma.comment.create)
+const mockFindUniqueComment = vi.mocked(prisma.comment.findUnique)
+const mockDeleteComment = vi.mocked(prisma.comment.delete)
 
 // ─── Test users ───────────────────────────────────────────────────────────────
 
@@ -44,6 +48,13 @@ const managerUser: AuthUser = {
   role: 'manager',
 }
 
+const managerUser2: AuthUser = {
+  id: '55555555-5555-5555-5555-555555555555',
+  name: '佐藤 部長',
+  email: 'sato@test.com',
+  role: 'manager',
+}
+
 const adminUser: AuthUser = {
   id: '44444444-4444-4444-4444-444444444444',
   name: '管理 太郎',
@@ -54,6 +65,7 @@ const adminUser: AuthUser = {
 // ─── Sample data ──────────────────────────────────────────────────────────────
 
 const REPORT_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const COMMENT_ID = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
 
 const sampleReport = {
   id: REPORT_ID,
@@ -395,5 +407,110 @@ describe('createComment', () => {
         createComment(managerUser, REPORT_ID, createInput),
       ).rejects.toBeInstanceOf(Prisma.PrismaClientKnownRequestError)
     })
+  })
+})
+
+// ─── deleteComment ────────────────────────────────────────────────────────────
+
+describe('deleteComment', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('コメントが存在しない場合はNOT_FOUNDをスローする', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce(null)
+
+    await expect(deleteComment(managerUser, REPORT_ID, COMMENT_ID)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+
+  it('コメントのdailyReportIdが一致しない場合はNOT_FOUNDをスローする', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    } as never)
+
+    await expect(deleteComment(managerUser, REPORT_ID, COMMENT_ID)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+
+  it('salesユーザーがコメント削除を試みるとFORBIDDENをスローする', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: REPORT_ID,
+    } as never)
+
+    await expect(deleteComment(salesUser, REPORT_ID, COMMENT_ID)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+    // salesは自分のコメントが存在する場合でも削除不可（ロールで弾く）
+    expect(mockDeleteComment).not.toHaveBeenCalled()
+  })
+
+  it('他のmanagerのコメントをmanagerが削除しようとするとFORBIDDENをスローする', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: REPORT_ID,
+    } as never)
+
+    await expect(deleteComment(managerUser2, REPORT_ID, COMMENT_ID)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    })
+  })
+
+  it('managerが自分のコメントを削除できる', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: REPORT_ID,
+    } as never)
+    mockDeleteComment.mockResolvedValueOnce({} as never)
+
+    await expect(deleteComment(managerUser, REPORT_ID, COMMENT_ID)).resolves.toBeUndefined()
+    expect(mockDeleteComment).toHaveBeenCalledWith({ where: { id: COMMENT_ID } })
+  })
+
+  it('adminが他人のコメントを削除できる', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: REPORT_ID,
+    } as never)
+    mockDeleteComment.mockResolvedValueOnce({} as never)
+
+    await expect(deleteComment(adminUser, REPORT_ID, COMMENT_ID)).resolves.toBeUndefined()
+    expect(mockDeleteComment).toHaveBeenCalledWith({ where: { id: COMMENT_ID } })
+  })
+
+  it('削除時にP2025が発生した場合はNOT_FOUNDをスローする（レースコンディション）', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: REPORT_ID,
+    } as never)
+    const p2025 = new Prisma.PrismaClientKnownRequestError('Record not found.', {
+      code: 'P2025',
+      clientVersion: '5.0.0',
+    })
+    mockDeleteComment.mockRejectedValueOnce(p2025)
+
+    await expect(deleteComment(managerUser, REPORT_ID, COMMENT_ID)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    })
+  })
+
+  it('P2025以外のPrismaエラーはそのまま再スローされる', async () => {
+    mockFindUniqueComment.mockResolvedValueOnce({
+      commenterId: managerUser.id,
+      dailyReportId: REPORT_ID,
+    } as never)
+    const p2002 = new Prisma.PrismaClientKnownRequestError('Unique constraint failed.', {
+      code: 'P2002',
+      clientVersion: '5.0.0',
+    })
+    mockDeleteComment.mockRejectedValueOnce(p2002)
+
+    await expect(deleteComment(managerUser, REPORT_ID, COMMENT_ID)).rejects.toBeInstanceOf(
+      Prisma.PrismaClientKnownRequestError,
+    )
   })
 })
