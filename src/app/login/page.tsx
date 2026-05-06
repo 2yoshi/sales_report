@@ -22,7 +22,7 @@ import type { ApiResponse, AuthUser } from '@/types'
 
 const loginSchema = z.object({
   email: z.string().email('メール形式で入力してください'),
-  password: z.string().min(8, '8文字以上で入力してください'),
+  password: z.string().min(1, 'パスワードを入力してください'),
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -41,9 +41,9 @@ export default function LoginPage() {
     defaultValues: { email: '', password: '' },
   })
 
-  const { isSubmitting } = form.formState
+  const { isSubmitting, errors } = form.formState
 
-  // すでに認証済みならダッシュボードへ
+  // 認証済み（初期ロード時 or ログイン成功後）はダッシュボードへ
   useEffect(() => {
     if (!isLoading && user) {
       router.replace('/')
@@ -54,10 +54,10 @@ export default function LoginPage() {
     try {
       const res = await apiClient.post<ApiResponse<LoginResponse>>(
         '/api/auth/login',
-        { email: values.email, password: values.password },
+        values,
       )
       login(res.data.access_token, res.data.user)
-      router.push('/')
+      // ナビゲーションは useEffect に委譲（user state 更新後に発火）
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'INVALID_CREDENTIALS') {
         form.setError('root', {
@@ -94,12 +94,12 @@ export default function LoginPage() {
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
               {/* サーバーエラー */}
-              {form.formState.errors.root && (
+              {errors.root && (
                 <div
                   role="alert"
                   className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
                 >
-                  {form.formState.errors.root.message}
+                  {errors.root.message}
                 </div>
               )}
 
