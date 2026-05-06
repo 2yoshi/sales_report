@@ -29,3 +29,25 @@ export const updateUserSchema = createUserSchema.omit({ password: true }).extend
 
 export type CreateUserInput = z.infer<typeof createUserSchema>
 export type UpdateUserInput = z.infer<typeof updateUserSchema>
+
+export const listUsersQuerySchema = z.object({
+  role: z.enum(['sales', 'manager', 'admin']).optional(),
+  page: z
+    .string()
+    .optional()
+    .transform((val) => (val !== undefined ? parseInt(val, 10) : 1))
+    .pipe(z.number().int().min(1, 'pageは1以上で指定してください')),
+  per_page: z
+    .string()
+    .optional()
+    .transform((val) => (val !== undefined ? parseInt(val, 10) : 20))
+    .pipe(
+      z
+        .number()
+        .int()
+        .min(1, 'per_pageは1以上で指定してください')
+        .max(100, 'per_pageは100以下で指定してください'),
+    ),
+})
+
+export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>
