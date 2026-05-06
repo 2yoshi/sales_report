@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table'
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
+import { ROLE_LABELS } from '@/lib/users/constants'
 import type { PaginatedResponse, UserRole } from '@/types'
 
 interface UserItem {
@@ -21,12 +22,6 @@ interface UserItem {
   name: string
   email: string
   role: UserRole
-}
-
-const ROLE_LABELS: Record<UserRole, string> = {
-  sales: '営業',
-  manager: '上長',
-  admin: '管理者',
 }
 
 export default function UsersPage() {

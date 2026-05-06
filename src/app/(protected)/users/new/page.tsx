@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { UserForm } from '@/components/users/UserForm'
+import { UserForm, type UserFormValues } from '@/components/users/UserForm'
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -21,7 +21,7 @@ export default function NewUserPage() {
   if (authLoading || !user) return null
   if (user.role !== 'admin') return null
 
-  async function handleSubmit(values: { name: string; email: string; password: string; role: 'sales' | 'manager' | 'admin' }) {
+  async function handleSubmit(values: UserFormValues) {
     setServerError(null)
     try {
       await apiClient.post('/api/users', {

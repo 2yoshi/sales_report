@@ -15,33 +15,24 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { ROLE_LABELS } from '@/lib/users/constants'
 import type { UserRole } from '@/types'
 
-const ROLE_LABELS: Record<UserRole, string> = {
-  sales: '営業',
-  manager: '上長',
-  admin: '管理者',
-}
-
-export const createUserSchema = z.object({
+const createUserSchema = z.object({
   name: z.string().min(1, '氏名は必須です').max(100, '100文字以内で入力してください'),
   email: z.string().min(1, 'メールアドレスは必須です').email('メール形式で入力してください'),
   password: z.string().min(8, '8文字以上で入力してください'),
   role: z.enum(['sales', 'manager', 'admin'], { required_error: 'ロールを選択してください' }),
 })
 
-export const updateUserSchema = z.object({
+const updateUserSchema = z.object({
   name: z.string().min(1, '氏名は必須です').max(100, '100文字以内で入力してください'),
   email: z.string().min(1, 'メールアドレスは必須です').email('メール形式で入力してください'),
   password: z.string().min(8, '8文字以上で入力してください').or(z.literal('')),
   role: z.enum(['sales', 'manager', 'admin'], { required_error: 'ロールを選択してください' }),
 })
 
-export type CreateUserFormValues = z.infer<typeof createUserSchema>
-export type UpdateUserFormValues = z.infer<typeof updateUserSchema>
-
-// 共通の値型（フォーム内部で使用）
-type UserFormValues = {
+export type UserFormValues = {
   name: string
   email: string
   password: string

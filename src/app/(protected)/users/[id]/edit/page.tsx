@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import { UserForm } from '@/components/users/UserForm'
+import { UserForm, type UserFormValues } from '@/components/users/UserForm'
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import { useAuth } from '@/contexts/AuthContext'
 import type { ApiResponse, UserRole } from '@/types'
@@ -20,7 +20,7 @@ export default function EditUserPage() {
   const params = useParams<{ id: string }>()
   const userId = params.id
 
-  const [defaultValues, setDefaultValues] = useState<{ name: string; email: string; password: string; role: UserRole } | null>(null)
+  const [defaultValues, setDefaultValues] = useState<UserFormValues | null>(null)
   const [isLoadingUser, setIsLoadingUser] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [serverError, setServerError] = useState<string | null>(null)
@@ -53,7 +53,7 @@ export default function EditUserPage() {
     void fetchUser()
   }, [authLoading, user, userId])
 
-  async function handleSubmit(values: { name: string; email: string; password: string; role: UserRole }) {
+  async function handleSubmit(values: UserFormValues) {
     setServerError(null)
     try {
       await apiClient.put(`/api/users/${userId}`, {
