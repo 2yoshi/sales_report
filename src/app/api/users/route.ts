@@ -35,7 +35,7 @@ async function handleGetUsers(
   }
 }
 
-export const GET = withAuth(handleGetUsers, ['admin', 'manager'])
+export const GET = withAuth(handleGetUsers, ['admin'])
 
 async function handlePostUser(
   req: NextRequest,
