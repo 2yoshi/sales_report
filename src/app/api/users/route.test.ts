@@ -111,13 +111,13 @@ describe('GET /api/users', () => {
       expect(body.error.code).toBe('FORBIDDEN')
     })
 
-    it('managerユーザーは403を返す', async () => {
+    it('managerユーザーで200を返す（担当者フィルタのため許可）', async () => {
+      mockListUsers.mockResolvedValueOnce(defaultListResult)
+
       const req = makeGetRequest(managerUser)
       const res = await GET(req, {})
-      const body = await res.json()
 
-      expect(res.status).toBe(403)
-      expect(body.error.code).toBe('FORBIDDEN')
+      expect(res.status).toBe(200)
     })
 
     it('adminユーザーで200を返す', async () => {
