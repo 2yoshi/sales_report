@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { Plus, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -15,14 +15,31 @@ import { useAuth } from '@/contexts/AuthContext'
 
 const PER_PAGE = 20
 
+// 確定済み検索パラメータ（絞り込みボタン押下時にのみ更新される）
+interface CommittedParams {
+  startDate: string
+  endDate: string
+  userId: string
+  page: number
+}
+
 export function DashboardClient() {
   const { user } = useAuth()
 
-  const defaultDates = getDateRangeForLastDays(30)
+  const defaultDates = useMemo(() => getDateRangeForLastDays(30), [])
+
+  // 入力中フィルタ状態（フォーム上の値）
   const [startDate, setStartDate] = useState(defaultDates.startDate)
   const [endDate, setEndDate] = useState(defaultDates.endDate)
   const [selectedUserId, setSelectedUserId] = useState('')
-  const [page, setPage] = useState(1)
+
+  // 確定済み検索パラメータ（変化したときのみ API を呼ぶ）
+  const [committedParams, setCommittedParams] = useState<CommittedParams>({
+    startDate: defaultDates.startDate,
+    endDate: defaultDates.endDate,
+    userId: '',
+    page: 1,
+  })
 
   const [reports, setReports] = useState<ReportListItemClient[]>([])
   const [total, setTotal] = useState(0)
@@ -44,45 +61,42 @@ export function DashboardClient() {
       })
   }, [isManagerOrAdmin])
 
-  const loadReports = useCallback(
-    async (currentPage: number) => {
-      setIsLoading(true)
-      setError(null)
+  // committedParams が変わったときのみ API を呼ぶ（フィルタ入力中は呼ばない）
+  useEffect(() => {
+    if (!user) return
 
-      try {
-        const result = await fetchReports({
-          start_date: startDate || undefined,
-          end_date: endDate || undefined,
-          user_id: isManagerOrAdmin && selectedUserId ? selectedUserId : undefined,
-          page: currentPage,
-          per_page: PER_PAGE,
-        })
+    setIsLoading(true)
+    setError(null)
+
+    fetchReports({
+      start_date: committedParams.startDate || undefined,
+      end_date: committedParams.endDate || undefined,
+      user_id: isManagerOrAdmin && committedParams.userId ? committedParams.userId : undefined,
+      page: committedParams.page,
+      per_page: PER_PAGE,
+    })
+      .then((result) => {
         setReports(result.data)
         setTotal(result.meta.total)
-      } catch (err) {
+      })
+      .catch((err) => {
         if (err instanceof ApiClientError) {
           setError(err.message)
         } else {
           setError('日報の取得中にエラーが発生しました')
         }
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    [startDate, endDate, selectedUserId, isManagerOrAdmin],
-  )
+      })
+      .finally(() => setIsLoading(false))
+  }, [committedParams, isManagerOrAdmin, user])
 
-  useEffect(() => {
-    void loadReports(page)
-  }, [loadReports, page])
-
+  // 絞り込みボタン押下: 入力値を確定してページを1に戻す
   function handleSearch() {
-    setPage(1)
-    void loadReports(1)
+    setCommittedParams({ startDate, endDate, userId: selectedUserId, page: 1 })
   }
 
+  // ページ変更: フィルタはそのままでページのみ更新
   function handlePageChange(newPage: number) {
-    setPage(newPage)
+    setCommittedParams((prev) => ({ ...prev, page: newPage }))
   }
 
   if (!user) return null
@@ -139,7 +153,7 @@ export function DashboardClient() {
       {/* ページネーション */}
       {!isLoading && !error && (
         <Pagination
-          page={page}
+          page={committedParams.page}
           perPage={PER_PAGE}
           total={total}
           onPageChange={handlePageChange}
