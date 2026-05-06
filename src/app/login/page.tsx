@@ -1,12 +1,31 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
 import { ClipboardList } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { useAuth } from '@/contexts/AuthContext'
 import { apiClient, ApiClientError } from '@/lib/api-client'
 import type { ApiResponse, AuthUser } from '@/types'
+
+const loginSchema = z.object({
+  email: z.string().email('メール形式で入力してください'),
+  password: z.string().min(1, 'パスワードを入力してください'),
+})
+
+type LoginFormValues = z.infer<typeof loginSchema>
 
 interface LoginResponse {
   access_token: string
@@ -17,42 +36,38 @@ export default function LoginPage() {
   const { user, isLoading, login } = useAuth()
   const router = useRouter()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '' },
+  })
 
-  // すでに認証済みならダッシュボードへ
+  const { isSubmitting, errors } = form.formState
+
+  // 認証済み（初期ロード時 or ログイン成功後）はダッシュボードへ
   useEffect(() => {
     if (!isLoading && user) {
       router.replace('/')
     }
   }, [isLoading, user, router])
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setIsSubmitting(true)
-
+  async function onSubmit(values: LoginFormValues) {
     try {
       const res = await apiClient.post<ApiResponse<LoginResponse>>(
         '/api/auth/login',
-        { email, password },
+        values,
       )
       login(res.data.access_token, res.data.user)
-      router.push('/')
+      // ナビゲーションは useEffect に委譲（user state 更新後に発火）
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        if (err.code === 'INVALID_CREDENTIALS') {
-          setError('メールアドレスまたはパスワードが正しくありません')
-        } else {
-          setError(err.message)
-        }
+      if (err instanceof ApiClientError && err.code === 'INVALID_CREDENTIALS') {
+        form.setError('root', {
+          message: 'メールアドレスまたはパスワードが正しくありません',
+        })
       } else {
-        setError('ログインに失敗しました。しばらく経ってから再度お試しください。')
+        form.setError('root', {
+          message: 'ログインに失敗しました。しばらく経ってから再度お試しください。',
+        })
       }
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -76,61 +91,65 @@ export default function LoginPage() {
 
         {/* フォーム */}
         <div className="rounded-lg border bg-card p-6 shadow-sm">
-          <form onSubmit={handleSubmit} noValidate className="space-y-4">
-            {/* エラーメッセージ */}
-            {error && (
-              <div
-                role="alert"
-                className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              >
-                {error}
-              </div>
-            )}
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
+              {/* サーバーエラー */}
+              {errors.root && (
+                <div
+                  role="alert"
+                  className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
+                >
+                  {errors.root.message}
+                </div>
+              )}
 
-            {/* メールアドレス */}
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-sm font-medium">
-                メールアドレス
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={isSubmitting}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="例: yamada@example.com"
+              {/* メールアドレス */}
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>メールアドレス</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        placeholder="例: yamada@example.com"
+                        disabled={isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            {/* パスワード */}
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-sm font-medium">
-                パスワード
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={isSubmitting}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="パスワードを入力"
+              {/* パスワード */}
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>パスワード</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="password"
+                        autoComplete="current-password"
+                        placeholder="パスワードを入力"
+                        disabled={isSubmitting}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'ログイン中...' : 'ログイン'}
-            </Button>
-          </form>
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? 'ログイン中...' : 'ログイン'}
+              </Button>
+            </form>
+          </Form>
         </div>
       </div>
     </div>
