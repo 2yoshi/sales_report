@@ -122,20 +122,17 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
     throw AppError.notFound('ユーザー')
   }
 
-  const data: Prisma.UserUpdateInput = {
-    name: input.name,
-    email: input.email,
-    role: input.role,
-  }
-
-  if (input.password) {
-    data.passwordHash = await bcrypt.hash(input.password, 10)
-  }
+  const passwordHash = input.password ? await bcrypt.hash(input.password, 10) : undefined
 
   try {
     const user = await prisma.user.update({
       where: { id: userId },
-      data,
+      data: {
+        name: input.name,
+        email: input.email,
+        role: input.role,
+        ...(passwordHash ? { passwordHash } : {}),
+      },
       select: userSelect,
     })
     return formatUser(user)

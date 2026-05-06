@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/auth/guard'
 import { listUsersQuerySchema, createUserSchema } from '@/lib/schemas/user.schema'
 import { listUsers, createUser } from '@/lib/users/users.service'
 import { handleError } from '@/lib/errors'
+import { AppError } from '@/lib/errors/AppError'
 import type { AuthUser } from '@/types'
 
 async function handleGetUsers(
@@ -46,7 +47,7 @@ async function handlePostUser(
     try {
       body = await req.json()
     } catch {
-      throw new Error('Invalid JSON')
+      throw AppError.validationError('リクエストボディが不正なJSON形式です')
     }
     const input = createUserSchema.parse(body)
     const user = await createUser(input)

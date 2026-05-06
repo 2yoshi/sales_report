@@ -48,7 +48,7 @@ async function handlePutUser(
     try {
       body = await req.json()
     } catch {
-      throw new Error('Invalid JSON')
+      throw AppError.validationError('リクエストボディが不正なJSON形式です')
     }
     const input = updateUserSchema.parse(body)
     const data = await updateUser(userId, input)
