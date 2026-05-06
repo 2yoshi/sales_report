@@ -31,6 +31,7 @@ export type CustomerFormValues = z.infer<typeof customerSchema>
 interface CustomerFormProps {
   defaultValues?: CustomerFormValues
   onSubmit: (values: CustomerFormValues) => Promise<void>
+  onCancel?: () => void
   submitLabel: string
   serverError?: string | null
 }
@@ -38,6 +39,7 @@ interface CustomerFormProps {
 export function CustomerForm({
   defaultValues = { name: '', company: '', phone: '', email: '' },
   onSubmit,
+  onCancel,
   submitLabel,
   serverError,
 }: CustomerFormProps) {
@@ -50,13 +52,17 @@ export function CustomerForm({
 
   const { isSubmitting } = form.formState
 
-  async function handleSubmit(values: CustomerFormValues) {
-    await onSubmit(values)
+  function handleCancel() {
+    if (onCancel) {
+      onCancel()
+    } else {
+      router.push('/customers')
+    }
   }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} noValidate className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} noValidate className="space-y-4">
         {serverError && (
           <div
             role="alert"
@@ -139,7 +145,7 @@ export function CustomerForm({
             type="button"
             variant="outline"
             disabled={isSubmitting}
-            onClick={() => router.push('/customers')}
+            onClick={handleCancel}
           >
             キャンセル
           </Button>

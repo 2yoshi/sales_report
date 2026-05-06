@@ -30,10 +30,15 @@ export default function CustomersPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const currentPage = Number(searchParams.get('page') ?? '1')
+  const currentPage = Math.max(1, Number(searchParams.get('page')) || 1)
   const currentQ = searchParams.get('q') ?? ''
 
   const [searchInput, setSearchInput] = useState(currentQ)
+
+  // URL の q パラメータが変わったら検索ボックスも同期する（ブラウザ戻る/進む対応）
+  useEffect(() => {
+    setSearchInput(currentQ)
+  }, [currentQ])
   const [customers, setCustomers] = useState<CustomerItem[]>([])
   const [meta, setMeta] = useState({ total: 0, page: 1, per_page: PER_PAGE })
   const [isLoading, setIsLoading] = useState(true)
