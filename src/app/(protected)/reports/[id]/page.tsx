@@ -43,6 +43,7 @@ export default function ReportDetailPage() {
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [isEditMode, setIsEditMode] = useState(false)
   const [updateError, setUpdateError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const fetchReport = useCallback(async () => {
     setIsLoading(true)
@@ -62,6 +63,8 @@ export default function ReportDetailPage() {
       if (err instanceof ApiClientError) {
         if (err.status === 404) {
           setFetchError('日報が見つかりませんでした')
+        } else if (err.status === 403) {
+          setFetchError('この日報を閲覧する権限がありません')
         } else {
           setFetchError(err.message)
         }
@@ -152,14 +155,15 @@ export default function ReportDetailPage() {
 
   async function handleDelete() {
     if (!window.confirm('この日報を削除してもよいですか？この操作は取り消せません。')) return
+    setDeleteError(null)
     try {
       await apiClient.delete(`/api/reports/${reportId}`)
       router.push('/')
     } catch (err) {
       if (err instanceof ApiClientError) {
-        alert(`削除に失敗しました: ${err.message}`)
+        setDeleteError(`削除に失敗しました: ${err.message}`)
       } else {
-        alert('削除に失敗しました')
+        setDeleteError('削除に失敗しました')
       }
     }
   }
@@ -209,6 +213,17 @@ export default function ReportDetailPage() {
           )}
         </div>
       </div>
+
+      {/* 削除エラー */}
+      {deleteError && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {deleteError}
+        </div>
+      )}
 
       {/* 担当者・対象日 */}
       <div className="rounded-lg border bg-card p-4 shadow-sm">

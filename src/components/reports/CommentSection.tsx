@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/form'
 import { Textarea } from '@/components/ui/textarea'
 import { apiClient, ApiClientError } from '@/lib/api-client'
+import { formatDateTimeJst } from '@/lib/format'
 import type { AuthUser } from '@/types'
 
 export interface Comment {
@@ -41,15 +42,6 @@ const commentFormSchema = z.object({
 
 type CommentFormValues = z.infer<typeof commentFormSchema>
 
-function formatCommentDate(isoString: string): string {
-  const date = new Date(isoString)
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const d = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const mm = String(date.getMinutes()).padStart(2, '0')
-  return `${y}-${m}-${d} ${hh}:${mm}`
-}
 
 export function CommentSection({
   reportId,
@@ -135,7 +127,7 @@ export function CommentSection({
                 <span className="text-sm font-medium">
                   {comment.user.name}
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
-                    {formatCommentDate(comment.created_at)}
+                    {formatDateTimeJst(comment.created_at)}
                   </span>
                 </span>
                 {canDeleteComment(comment) && (
@@ -179,7 +171,7 @@ export function CommentSection({
               name="body"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>コメントを追加（上長のみ）</FormLabel>
+                  <FormLabel>コメントを追加</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="コメントを入力してください（2000文字以内）"

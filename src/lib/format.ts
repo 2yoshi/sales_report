@@ -32,6 +32,14 @@ export function getTodayJst(): string {
 }
 
 /**
+ * UTC の ISO 文字列を JST 基準の「YYYY-MM-DD HH:MM」形式に変換
+ */
+export function formatDateTimeJst(isoString: string): string {
+  const jst = new Date(new Date(isoString).getTime() + 9 * 60 * 60 * 1000)
+  return jst.toISOString().slice(0, 16).replace('T', ' ')
+}
+
+/**
  * 直近N日の開始日と終了日を返す（YYYY-MM-DD形式）
  */
 export function getDateRangeForLastDays(days: number): { startDate: string; endDate: string } {

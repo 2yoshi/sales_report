@@ -192,6 +192,17 @@ describe('ReportDetailPage', () => {
       })
     })
 
+    it('403エラー時は「この日報を閲覧する権限がありません」と表示される', async () => {
+      setupAuthAs(salesUser)
+      vi.mocked(apiClient.get).mockRejectedValue(
+        new ApiClientError('FORBIDDEN', 'Forbidden', undefined, 403),
+      )
+      render(<ReportDetailPage />)
+      await waitFor(() => {
+        expect(screen.getByText('この日報を閲覧する権限がありません')).toBeInTheDocument()
+      })
+    })
+
     it('エラー時は「一覧へ戻る」リンクが表示される', async () => {
       setupAuthAs(salesUser)
       vi.mocked(apiClient.get).mockRejectedValue(
@@ -399,6 +410,26 @@ describe('ReportDetailPage', () => {
       await waitFor(() => {
         expect(apiClient.delete).toHaveBeenCalledWith('/api/reports/report-id-1')
         expect(mockPush).toHaveBeenCalledWith('/')
+      })
+    })
+
+    it('削除失敗時にインラインエラーが表示される', async () => {
+      const user = userEvent.setup()
+      setupAuthAs(salesUser)
+      setupApiSuccess()
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      vi.mocked(apiClient.delete).mockRejectedValue(
+        new ApiClientError('SERVER_ERROR', '削除に失敗しました'),
+      )
+      render(<ReportDetailPage />)
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /削除/ })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /削除/ }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent('削除に失敗しました')
       })
     })
 

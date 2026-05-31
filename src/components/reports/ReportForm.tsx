@@ -70,7 +70,7 @@ interface ReportFormProps {
   onSubmit: (values: ReportFormValues) => Promise<void>
   onCancel: () => void
   serverError?: string | null
-  defaultValues?: Partial<ReportFormValues>
+  defaultValues?: ReportFormValues
   isEditMode?: boolean
 }
 
