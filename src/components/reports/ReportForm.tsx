@@ -70,9 +70,11 @@ interface ReportFormProps {
   onSubmit: (values: ReportFormValues) => Promise<void>
   onCancel: () => void
   serverError?: string | null
+  defaultValues?: ReportFormValues
+  isEditMode?: boolean
 }
 
-export function ReportForm({ onSubmit, onCancel, serverError }: ReportFormProps) {
+export function ReportForm({ onSubmit, onCancel, serverError, defaultValues, isEditMode = false }: ReportFormProps) {
   const [customers, setCustomers] = useState<CustomerOption[]>([])
   const [customersLoading, setCustomersLoading] = useState(true)
   const [customersError, setCustomersError] = useState<string | null>(null)
@@ -81,7 +83,7 @@ export function ReportForm({ onSubmit, onCancel, serverError }: ReportFormProps)
 
   const form = useForm<ReportFormValues>({
     resolver: zodResolver(reportFormSchema),
-    defaultValues: {
+    defaultValues: defaultValues ?? {
       report_date: todayJst,
       problem: '',
       plan: '',
@@ -158,7 +160,8 @@ export function ReportForm({ onSubmit, onCancel, serverError }: ReportFormProps)
                 <Input
                   type="date"
                   max={todayJst}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isEditMode}
+                  readOnly={isEditMode}
                   {...field}
                 />
               </FormControl>
@@ -339,7 +342,7 @@ export function ReportForm({ onSubmit, onCancel, serverError }: ReportFormProps)
             キャンセル
           </Button>
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? '提出中...' : '提出'}
+            {isSubmitting ? (isEditMode ? '更新中...' : '提出中...') : (isEditMode ? '更新' : '提出')}
           </Button>
         </div>
       </form>
