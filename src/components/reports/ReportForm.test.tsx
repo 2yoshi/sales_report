@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ReportForm } from './ReportForm'
 import { apiClient } from '@/lib/api-client'
@@ -44,7 +44,7 @@ function renderReportForm(props?: { serverError?: string | null }) {
 async function waitForCustomersLoaded() {
   // 顧客セレクトがロード中でなくなるまで待つ（Select が有効化される）
   await waitFor(() => {
-    expect(apiClient.get).toHaveBeenCalledWith('/api/customers?per_page=100')
+    expect(apiClient.get).toHaveBeenCalledWith('/api/customers?per_page=100&page=1')
   })
 }
 
@@ -108,10 +108,10 @@ describe('ReportForm', () => {
   })
 
   describe('顧客一覧の読み込み', () => {
-    it('顧客一覧が /api/customers?per_page=100 から取得される', async () => {
+    it('顧客一覧が /api/customers?per_page=100&page=1 から取得される', async () => {
       renderReportForm()
       await waitFor(() => {
-        expect(apiClient.get).toHaveBeenCalledWith('/api/customers?per_page=100')
+        expect(apiClient.get).toHaveBeenCalledWith('/api/customers?per_page=100&page=1')
       })
     })
 
@@ -195,8 +195,6 @@ describe('ReportForm', () => {
       // textarea に直接 1001文字を input イベントで設定する
       const contentField = container.querySelector('textarea[name="visit_records.0.content"]') as HTMLTextAreaElement
       await user.click(contentField)
-      // fireEvent.change で直接設定
-      const { fireEvent } = await import('@testing-library/react')
       fireEvent.change(contentField, { target: { value: 'a'.repeat(1001) } })
 
       await user.click(screen.getByRole('button', { name: '提出' }))
@@ -211,7 +209,6 @@ describe('ReportForm', () => {
       const { container } = renderReportForm()
       await waitForCustomersLoaded()
 
-      const { fireEvent } = await import('@testing-library/react')
       const problemField = container.querySelector('textarea[name="problem"]') as HTMLTextAreaElement
       fireEvent.change(problemField, { target: { value: 'a'.repeat(2001) } })
 
@@ -229,7 +226,6 @@ describe('ReportForm', () => {
       const { container } = renderReportForm()
       await waitForCustomersLoaded()
 
-      const { fireEvent } = await import('@testing-library/react')
       const planField = container.querySelector('textarea[name="plan"]') as HTMLTextAreaElement
       fireEvent.change(planField, { target: { value: 'a'.repeat(2001) } })
 
