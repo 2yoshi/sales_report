@@ -24,6 +24,14 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
+ * JST基準で今日の日付を返す（YYYY-MM-DD形式）
+ */
+export function getTodayJst(): string {
+  const nowJst = new Date(Date.now() + 9 * 60 * 60 * 1000)
+  return nowJst.toISOString().slice(0, 10)
+}
+
+/**
  * 直近N日の開始日と終了日を返す（YYYY-MM-DD形式）
  */
 export function getDateRangeForLastDays(days: number): { startDate: string; endDate: string } {
