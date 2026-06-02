@@ -5,11 +5,11 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['tests/api/**/*.test.ts'],
+    include: ['tests/api/**/*.test.ts', 'tests/auth/**/*.test.ts', 'tests/security/**/*.test.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
     env: {
-      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/sales_report_test',
+      DATABASE_URL: 'postgresql://postgres:postgres@db:5432/sales_report_test',
       JWT_SECRET: 'test-jwt-secret',
       NODE_ENV: 'test',
     },
