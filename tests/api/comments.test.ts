@@ -14,6 +14,7 @@ import {
   prisma,
   TEST_USERS,
   TEST_CUSTOMERS,
+  PASSWORD_HASH,
 } from '../helpers/db'
 import { makeToken } from '../helpers/auth'
 import type { AuthUser } from '@/types'
@@ -140,6 +141,27 @@ describe('コメントAPI', () => {
     })
   })
 
+  // ─── POST /reports/:id/comments body 2001文字 → 400, VALIDATION_ERROR ────────
+
+  describe('POST /reports/:id/comments body が2001文字 → 400, VALIDATION_ERROR', () => {
+    it('bodyが2001文字のコメントを投稿すると400とVALIDATION_ERRORを返す', async () => {
+      const reportId = await createTestReport({
+        userId: YAMADA.id,
+        reportDate: '2026-05-01',
+        visitRecords: [{ customerId: CUST01.id, content: '訪問内容', sortOrder: 1 }],
+      })
+
+      const req = makeRequest(`${BASE}/${reportId}/comments`, 'POST', TANAKA, {
+        body: 'あ'.repeat(2001),
+      })
+      const res = await createComment(req, reportContext(reportId))
+
+      expect(res.status).toBe(400)
+      const resBody = await res.json()
+      expect(resBody.error.code).toBe('VALIDATION_ERROR')
+    })
+  })
+
   // ─── API-033: POST /reports/:id/comments sales → 403, FORBIDDEN ─────────────
 
   describe('API-033: POST /reports/:id/comments sales → 403, FORBIDDEN', () => {
@@ -232,7 +254,7 @@ describe('コメントAPI', () => {
           id: otherManagerId,
           name: '別の部長',
           email: 'other-manager@test.com',
-          passwordHash: '$2a$10$dummy',
+          passwordHash: PASSWORD_HASH,
           role: 'manager',
         },
       })

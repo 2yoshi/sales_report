@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET as listCustomers, POST as createCustomer } from '@/app/api/customers/route'
 import {
+  GET as getCustomer,
   PUT as updateCustomer,
   DELETE as deleteCustomer,
 } from '@/app/api/customers/[id]/route'
@@ -15,6 +16,7 @@ import {
   TEST_CUSTOMERS,
 } from '../helpers/db'
 import { makeToken } from '../helpers/auth'
+import type { AuthUser } from '@/types'
 
 const YAMADA = TEST_USERS.yamada   // sales
 const ADMIN = TEST_USERS.admin     // admin
@@ -23,12 +25,10 @@ const CUST02 = TEST_CUSTOMERS.cust02
 
 const BASE = 'http://localhost/api/customers'
 
-type TestUser = (typeof TEST_USERS)[keyof typeof TEST_USERS]
-
 function makeRequest(
   url: string,
   method: string,
-  user: TestUser,
+  user: AuthUser,
   body?: unknown,
 ): NextRequest {
   const headers: Record<string, string> = {
@@ -43,7 +43,7 @@ function makeRequest(
 }
 
 function idContext(id: string) {
-  return { params: { id } }
+  return { params: Promise.resolve({ id }) }
 }
 
 describe('顧客API', () => {
@@ -120,6 +120,20 @@ describe('顧客API', () => {
       expect(res.status).toBe(201)
       const body = await res.json()
       expect(body.data.name).toBe('最小顧客')
+    })
+  })
+
+  // ─── GET /customers/:id 存在しない → 404 ───────────────────────────────────
+
+  describe('GET /customers/:id → 404, 存在しないID', () => {
+    it('存在しない顧客IDを指定すると404を返す', async () => {
+      const nonExistentId = '00000000-0000-0000-0000-999999999999'
+      const req = makeRequest(`${BASE}/${nonExistentId}`, 'GET', YAMADA)
+      const res = await getCustomer(req, idContext(nonExistentId))
+
+      expect(res.status).toBe(404)
+      const body = await res.json()
+      expect(body.error.code).toBe('NOT_FOUND')
     })
   })
 

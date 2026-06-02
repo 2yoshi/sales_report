@@ -14,7 +14,7 @@ async function handleGetCustomer(
   _user: AuthUser,
 ): Promise<NextResponse> {
   try {
-    const { id } = context.params as { id: string }
+    const { id } = await (context.params as Promise<{ id: string }>)
 
     if (!UUID_REGEX.test(id)) {
       throw AppError.notFound('顧客')
@@ -35,7 +35,7 @@ async function handlePutCustomer(
   _user: AuthUser,
 ): Promise<NextResponse> {
   try {
-    const { id } = context.params as { id: string }
+    const { id } = await (context.params as Promise<{ id: string }>)
 
     if (!UUID_REGEX.test(id)) {
       throw AppError.notFound('顧客')
@@ -58,7 +58,7 @@ async function handleDeleteCustomer(
   _user: AuthUser,
 ): Promise<NextResponse> {
   try {
-    const { id } = context.params as { id: string }
+    const { id } = await (context.params as Promise<{ id: string }>)
 
     if (!UUID_REGEX.test(id)) {
       throw AppError.notFound('顧客')

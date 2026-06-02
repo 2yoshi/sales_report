@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 export const prisma = new PrismaClient()
 
 // Password hash for 'Test1234!' — computed synchronously once per process
-const PASSWORD_HASH = bcrypt.hashSync('Test1234!', 10)
+export const PASSWORD_HASH = bcrypt.hashSync('Test1234!', 10)
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 

@@ -12,19 +12,19 @@ import {
   TEST_CUSTOMERS,
 } from '../helpers/db'
 import { makeToken } from '../helpers/auth'
+import type { AuthUser } from '@/types'
 
 const YAMADA = TEST_USERS.yamada   // sales
+const TANAKA = TEST_USERS.tanaka   // manager
 const ADMIN = TEST_USERS.admin     // admin
 const CUST01 = TEST_CUSTOMERS.cust01
 
 const BASE = 'http://localhost/api/users'
 
-type TestUser = (typeof TEST_USERS)[keyof typeof TEST_USERS]
-
 function makeRequest(
   url: string,
   method: string,
-  user: TestUser,
+  user: AuthUser,
   body?: unknown,
 ): NextRequest {
   const headers: Record<string, string> = {
@@ -68,6 +68,15 @@ describe('ユーザーAPI', () => {
 
     it('salesがユーザー一覧を取得しようとすると403を返す', async () => {
       const req = makeRequest(BASE, 'GET', YAMADA)
+      const res = await listUsers(req, {})
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.error.code).toBe('FORBIDDEN')
+    })
+
+    it('managerがユーザー一覧を取得しようとすると403を返す', async () => {
+      const req = makeRequest(BASE, 'GET', TANAKA)
       const res = await listUsers(req, {})
 
       expect(res.status).toBe(403)
