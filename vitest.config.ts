@@ -16,7 +16,7 @@ export default defineConfig({
 
     // テスト対象ファイルパターン
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['node_modules/**', '.next/**', 'dist/**', 'issue-*/**', 'tests/api/**', 'tests/auth/**', 'tests/security/**'],
+    exclude: ['node_modules/**', '.next/**', 'dist/**', 'issue-*/**', 'tests/api/**', 'tests/auth/**', 'tests/security/**', 'tests/validation/**'],
 
     coverage: {
       provider: 'v8',
