@@ -63,20 +63,12 @@ function makeRequest(
   })
 }
 
-function reportIdContext(id: string) {
+function idContext(id: string) {
   return { params: Promise.resolve({ id }) }
 }
 
 function commentContext(id: string, commentId: string) {
   return { params: Promise.resolve({ id, commentId }) }
-}
-
-function customerIdContext(id: string) {
-  return { params: Promise.resolve({ id }) }
-}
-
-function userIdContext(id: string) {
-  return { params: Promise.resolve({ id }) }
 }
 
 describe('権限テスト（全ロール × 全操作）', () => {
@@ -267,7 +259,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'GET', YAMADA)
-      const res = await getReport(req, reportIdContext(reportId))
+      const res = await getReport(req, idContext(reportId))
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -282,7 +274,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'GET', YAMADA)
-      const res = await getReport(req, reportIdContext(reportId))
+      const res = await getReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -297,7 +289,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'GET', TANAKA)
-      const res = await getReport(req, reportIdContext(reportId))
+      const res = await getReport(req, idContext(reportId))
 
       expect(res.status).toBe(200)
     })
@@ -310,7 +302,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'GET', ADMIN)
-      const res = await getReport(req, reportIdContext(reportId))
+      const res = await getReport(req, idContext(reportId))
 
       expect(res.status).toBe(200)
     })
@@ -334,7 +326,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'PUT', YAMADA, updateBody)
-      const res = await updateReport(req, reportIdContext(reportId))
+      const res = await updateReport(req, idContext(reportId))
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -349,7 +341,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'PUT', YAMADA, updateBody)
-      const res = await updateReport(req, reportIdContext(reportId))
+      const res = await updateReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -364,7 +356,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'PUT', TANAKA, updateBody)
-      const res = await updateReport(req, reportIdContext(reportId))
+      const res = await updateReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -379,7 +371,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'PUT', ADMIN, updateBody)
-      const res = await updateReport(req, reportIdContext(reportId))
+      const res = await updateReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -399,7 +391,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'DELETE', YAMADA)
-      const res = await deleteReport(req, reportIdContext(reportId))
+      const res = await deleteReport(req, idContext(reportId))
 
       expect(res.status).toBe(204)
     })
@@ -412,7 +404,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'DELETE', YAMADA)
-      const res = await deleteReport(req, reportIdContext(reportId))
+      const res = await deleteReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -427,7 +419,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'DELETE', TANAKA)
-      const res = await deleteReport(req, reportIdContext(reportId))
+      const res = await deleteReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -442,7 +434,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}`, 'DELETE', ADMIN)
-      const res = await deleteReport(req, reportIdContext(reportId))
+      const res = await deleteReport(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -463,7 +455,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       await createTestComment({ reportId, commenterId: TANAKA.id, body: '良い日報です' })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}/comments`, 'GET', YAMADA)
-      const res = await listComments(req, reportIdContext(reportId))
+      const res = await listComments(req, idContext(reportId))
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -479,7 +471,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       await createTestComment({ reportId, commenterId: TANAKA.id, body: '良い日報です' })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}/comments`, 'GET', TANAKA)
-      const res = await listComments(req, reportIdContext(reportId))
+      const res = await listComments(req, idContext(reportId))
 
       expect(res.status).toBe(200)
     })
@@ -493,7 +485,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       await createTestComment({ reportId, commenterId: TANAKA.id, body: '良い日報です' })
 
       const req = makeRequest(`${REPORTS_BASE}/${reportId}/comments`, 'GET', ADMIN)
-      const res = await listComments(req, reportIdContext(reportId))
+      const res = await listComments(req, idContext(reportId))
 
       expect(res.status).toBe(200)
     })
@@ -516,7 +508,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
         YAMADA,
         { body: 'コメントしたい' },
       )
-      const res = await createComment(req, reportIdContext(reportId))
+      const res = await createComment(req, idContext(reportId))
 
       expect(res.status).toBe(403)
       const resBody = await res.json()
@@ -536,7 +528,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
         TANAKA,
         { body: '管理職コメント' },
       )
-      const res = await createComment(req, reportIdContext(reportId))
+      const res = await createComment(req, idContext(reportId))
 
       expect(res.status).toBe(201)
       const resBody = await res.json()
@@ -556,7 +548,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
         ADMIN,
         { body: '管理者コメント' },
       )
-      const res = await createComment(req, reportIdContext(reportId))
+      const res = await createComment(req, idContext(reportId))
 
       expect(res.status).toBe(201)
       const resBody = await res.json()
@@ -566,9 +558,13 @@ describe('権限テスト（全ロール × 全操作）', () => {
 
   // ─── AUTH-P13: コメント削除（自分） ───────────────────────────────────────────
   // sales: ✕, manager: ○, admin: ○
+  // 注意: sales はコメントを作成できないロールのため、「自分のコメント」という概念自体が存在しない。
+  //       ここでは sales が他者（manager）のコメントを削除しようとした場合の 403 を検証する。
 
   describe('AUTH-P13: コメント削除（自分のコメント）', () => {
-    it('sales は自分以外の投稿したコメントを削除できない（403）', async () => {
+    // sales はコメント投稿権限がないため自分のコメントは存在しない。
+    // 他者（manager）のコメントを削除しようとした場合も 403 になることを検証する。
+    it('sales は他ロールが投稿したコメントを削除できない（403）', async () => {
       const reportId = await createTestReport({
         userId: YAMADA.id,
         reportDate: '2026-05-01',
@@ -772,7 +768,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       const req = makeRequest(`${CUSTOMERS_BASE}/${CUST01.id}`, 'PUT', YAMADA, {
         name: '佐藤 健（sales更新）',
       })
-      const res = await updateCustomer(req, customerIdContext(CUST01.id))
+      const res = await updateCustomer(req, idContext(CUST01.id))
 
       expect(res.status).toBe(200)
     })
@@ -781,7 +777,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       const req = makeRequest(`${CUSTOMERS_BASE}/${CUST01.id}`, 'PUT', TANAKA, {
         name: '佐藤 健（manager更新）',
       })
-      const res = await updateCustomer(req, customerIdContext(CUST01.id))
+      const res = await updateCustomer(req, idContext(CUST01.id))
 
       expect(res.status).toBe(200)
     })
@@ -790,7 +786,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
       const req = makeRequest(`${CUSTOMERS_BASE}/${CUST01.id}`, 'PUT', ADMIN, {
         name: '佐藤 健（admin更新）',
       })
-      const res = await updateCustomer(req, customerIdContext(CUST01.id))
+      const res = await updateCustomer(req, idContext(CUST01.id))
 
       expect(res.status).toBe(200)
     })
@@ -802,7 +798,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
   describe('AUTH-P23: 顧客削除', () => {
     it('sales は顧客を削除できない（403）', async () => {
       const req = makeRequest(`${CUSTOMERS_BASE}/${CUST01.id}`, 'DELETE', YAMADA)
-      const res = await deleteCustomer(req, customerIdContext(CUST01.id))
+      const res = await deleteCustomer(req, idContext(CUST01.id))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -811,7 +807,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
 
     it('manager は顧客を削除できない（403）', async () => {
       const req = makeRequest(`${CUSTOMERS_BASE}/${CUST01.id}`, 'DELETE', TANAKA)
-      const res = await deleteCustomer(req, customerIdContext(CUST01.id))
+      const res = await deleteCustomer(req, idContext(CUST01.id))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -820,7 +816,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
 
     it('admin は顧客を削除できる（204）', async () => {
       const req = makeRequest(`${CUSTOMERS_BASE}/${CUST01.id}`, 'DELETE', ADMIN)
-      const res = await deleteCustomer(req, customerIdContext(CUST01.id))
+      const res = await deleteCustomer(req, idContext(CUST01.id))
 
       expect(res.status).toBe(204)
     })
@@ -902,7 +898,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
         email: SUZUKI.email,
         role: 'sales',
       })
-      const res = await updateUser(req, userIdContext(SUZUKI.id))
+      const res = await updateUser(req, idContext(SUZUKI.id))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -915,7 +911,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
         email: YAMADA.email,
         role: 'sales',
       })
-      const res = await updateUser(req, userIdContext(YAMADA.id))
+      const res = await updateUser(req, idContext(YAMADA.id))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -928,7 +924,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
         email: YAMADA.email,
         role: 'sales',
       })
-      const res = await updateUser(req, userIdContext(YAMADA.id))
+      const res = await updateUser(req, idContext(YAMADA.id))
 
       expect(res.status).toBe(200)
       const body = await res.json()
@@ -937,7 +933,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
 
     it('sales はユーザーを削除できない（403）', async () => {
       const req = makeRequest(`${USERS_BASE}/${SUZUKI.id}`, 'DELETE', YAMADA)
-      const res = await deleteUser(req, userIdContext(SUZUKI.id))
+      const res = await deleteUser(req, idContext(SUZUKI.id))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -946,7 +942,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
 
     it('manager はユーザーを削除できない（403）', async () => {
       const req = makeRequest(`${USERS_BASE}/${YAMADA.id}`, 'DELETE', TANAKA)
-      const res = await deleteUser(req, userIdContext(YAMADA.id))
+      const res = await deleteUser(req, idContext(YAMADA.id))
 
       expect(res.status).toBe(403)
       const body = await res.json()
@@ -956,7 +952,7 @@ describe('権限テスト（全ロール × 全操作）', () => {
     it('admin はユーザーを削除できる（204）', async () => {
       // SUZUKI は日報なしなので削除可能
       const req = makeRequest(`${USERS_BASE}/${SUZUKI.id}`, 'DELETE', ADMIN)
-      const res = await deleteUser(req, userIdContext(SUZUKI.id))
+      const res = await deleteUser(req, idContext(SUZUKI.id))
 
       expect(res.status).toBe(204)
     })
