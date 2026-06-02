@@ -80,6 +80,21 @@ export async function seedTestCustomers(): Promise<void> {
   }
 }
 
+export async function createTestComment(params: {
+  reportId: string
+  commenterId: string
+  body?: string
+}): Promise<string> {
+  const comment = await prisma.comment.create({
+    data: {
+      dailyReportId: params.reportId,
+      commenterId: params.commenterId,
+      body: params.body ?? 'テストコメント',
+    },
+  })
+  return comment.id
+}
+
 export async function createTestReport(params: {
   id?: string
   userId: string
