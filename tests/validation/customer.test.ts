@@ -4,7 +4,6 @@ import { POST as createCustomer } from '@/app/api/customers/route'
 import {
   clearDatabase,
   seedTestUsers,
-  seedTestCustomers,
   prisma,
   TEST_USERS,
 } from '../helpers/db'
@@ -30,7 +29,6 @@ describe('顧客マスタバリデーション', () => {
   beforeEach(async () => {
     await clearDatabase()
     await seedTestUsers()
-    await seedTestCustomers()
   })
 
   afterAll(async () => {

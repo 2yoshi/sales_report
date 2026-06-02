@@ -4,7 +4,6 @@ import { POST as createUser } from '@/app/api/users/route'
 import {
   clearDatabase,
   seedTestUsers,
-  seedTestCustomers,
   prisma,
   TEST_USERS,
 } from '../helpers/db'
@@ -30,7 +29,6 @@ describe('ユーザー登録バリデーション', () => {
   beforeEach(async () => {
     await clearDatabase()
     await seedTestUsers()
-    await seedTestCustomers()
   })
 
   afterAll(async () => {
