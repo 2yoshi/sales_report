@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs'
 export const prisma = new PrismaClient()
 
 // Password hash for 'Test1234!' — computed synchronously once per process
-const PASSWORD_HASH = bcrypt.hashSync('Test1234!', 10)
+export const PASSWORD_HASH = bcrypt.hashSync('Test1234!', 10)
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 
@@ -78,6 +78,21 @@ export async function seedTestCustomers(): Promise<void> {
       data: { id: cust.id, name: cust.name, company: cust.company },
     })
   }
+}
+
+export async function createTestComment(params: {
+  reportId: string
+  commenterId: string
+  body?: string
+}): Promise<string> {
+  const comment = await prisma.comment.create({
+    data: {
+      dailyReportId: params.reportId,
+      commenterId: params.commenterId,
+      body: params.body ?? 'テストコメント',
+    },
+  })
+  return comment.id
 }
 
 export async function createTestReport(params: {
