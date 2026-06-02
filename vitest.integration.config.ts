@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['tests/api/**/*.test.ts', 'tests/auth/**/*.test.ts', 'tests/security/**/*.test.ts'],
+    include: ['tests/api/**/*.test.ts', 'tests/auth/**/*.test.ts', 'tests/security/**/*.test.ts', 'tests/validation/**/*.test.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
     // DATABASE_URL は .env.test から読み込む。
