@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET as listReports, POST as createReport } from '@/app/api/reports/route'
 import { GET as getReport, PUT as updateReport, DELETE as deleteReport } from '@/app/api/reports/[id]/route'
@@ -7,6 +7,7 @@ import {
   seedTestUsers,
   seedTestCustomers,
   createTestReport,
+  prisma,
   TEST_USERS,
   TEST_CUSTOMERS,
 } from '../helpers/db'
@@ -19,10 +20,12 @@ const TANAKA = TEST_USERS.tanaka
 const CUST01 = TEST_CUSTOMERS.cust01
 const CUST02 = TEST_CUSTOMERS.cust02
 
+type TestUser = (typeof TEST_USERS)[keyof typeof TEST_USERS]
+
 function makeRequest(
   url: string,
   method: string,
-  user: typeof YAMADA | typeof SUZUKI | typeof TANAKA,
+  user: TestUser,
   body?: unknown,
 ): NextRequest {
   const headers: Record<string, string> = {
@@ -48,6 +51,10 @@ describe('日報API', () => {
     await clearDatabase()
     await seedTestUsers()
     await seedTestCustomers()
+  })
+
+  afterAll(async () => {
+    await prisma.$disconnect()
   })
 
   // ─── 一覧取得 ───────────────────────────────────────────────────────────────
@@ -289,6 +296,125 @@ describe('日報API', () => {
       expect(res.status).toBe(403)
       const body = await res.json()
       expect(body.error.code).toBe('FORBIDDEN')
+    })
+  })
+
+  // ─── 日付フィルタ ────────────────────────────────────────────────────────────
+
+  describe('GET /reports?date_from&date_to → 日付範囲フィルタ', () => {
+    it('date_from・date_to で範囲内の日報のみ取得できる', async () => {
+      await createTestReport({
+        userId: YAMADA.id,
+        reportDate: '2026-04-01',
+        visitRecords: [{ customerId: CUST01.id, content: '4月1日訪問', sortOrder: 1 }],
+      })
+      await createTestReport({
+        userId: YAMADA.id,
+        reportDate: '2026-04-15',
+        visitRecords: [{ customerId: CUST01.id, content: '4月15日訪問', sortOrder: 1 }],
+      })
+      await createTestReport({
+        userId: YAMADA.id,
+        reportDate: '2026-05-01',
+        visitRecords: [{ customerId: CUST01.id, content: '5月1日訪問', sortOrder: 1 }],
+      })
+
+      const req = makeRequest(`${BASE}?date_from=2026-04-10&date_to=2026-04-30`, 'GET', YAMADA)
+      const res = await listReports(req, {})
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data).toHaveLength(1)
+      expect(body.data[0].report_date).toBe('2026-04-15')
+    })
+  })
+
+  // ─── 権限: sales が他人の日報を参照 ─────────────────────────────────────────
+
+  describe('GET /reports/:id sales が他人の日報 → 403', () => {
+    it('salesロールは他ユーザーの日報を取得しようとすると403を返す', async () => {
+      const reportId = await createTestReport({
+        userId: SUZUKI.id,
+        reportDate: '2026-05-01',
+        visitRecords: [{ customerId: CUST01.id, content: '訪問内容', sortOrder: 1 }],
+      })
+
+      const req = makeRequest(`${BASE}/${reportId}`, 'GET', YAMADA)
+      const res = await getReport(req, idContext(reportId))
+
+      expect(res.status).toBe(403)
+      const body = await res.json()
+      expect(body.error.code).toBe('FORBIDDEN')
+    })
+  })
+
+  // ─── PUT: report_date 変更不可 ───────────────────────────────────────────────
+
+  describe('PUT /reports/:id report_date を送っても変更されない', () => {
+    it('更新時に report_date を送っても対象日は変わらない', async () => {
+      const reportId = await createTestReport({
+        userId: YAMADA.id,
+        reportDate: '2026-05-01',
+        visitRecords: [{ customerId: CUST01.id, content: '元の訪問内容', sortOrder: 1 }],
+      })
+
+      const req = makeRequest(`${BASE}/${reportId}`, 'PUT', YAMADA, {
+        report_date: '2026-01-01', // 変更しようとする
+        problem: '更新後の課題',
+        plan: '更新後の計画',
+        visit_records: [{ customer_id: CUST01.id, content: '更新後の訪問内容', sort_order: 1 }],
+      })
+      const res = await updateReport(req, idContext(reportId))
+
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.data.report_date).toBe('2026-05-01') // 元の日付のまま
+    })
+  })
+
+  // ─── バリデーション ──────────────────────────────────────────────────────────
+
+  describe('POST /reports バリデーション', () => {
+    it('visit_records が空配列の場合 400 と VALIDATION_ERROR を返す', async () => {
+      const req = makeRequest(BASE, 'POST', YAMADA, {
+        report_date: '2026-05-01',
+        problem: 'テスト課題',
+        plan: 'テスト計画',
+        visit_records: [],
+      })
+      const res = await createReport(req, {})
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('problem が 2001 文字の場合 400 と VALIDATION_ERROR を返す', async () => {
+      const req = makeRequest(BASE, 'POST', YAMADA, {
+        report_date: '2026-05-01',
+        problem: 'あ'.repeat(2001),
+        plan: 'テスト計画',
+        visit_records: [{ customer_id: CUST01.id, content: '訪問内容', sort_order: 1 }],
+      })
+      const res = await createReport(req, {})
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('VALIDATION_ERROR')
+    })
+
+    it('report_date が未来日付の場合 400 と VALIDATION_ERROR を返す', async () => {
+      const req = makeRequest(BASE, 'POST', YAMADA, {
+        report_date: '2099-12-31',
+        problem: 'テスト課題',
+        plan: 'テスト計画',
+        visit_records: [{ customer_id: CUST01.id, content: '訪問内容', sort_order: 1 }],
+      })
+      const res = await createReport(req, {})
+
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error.code).toBe('VALIDATION_ERROR')
     })
   })
 })

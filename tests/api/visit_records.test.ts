@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterAll } from 'vitest'
 import { NextRequest } from 'next/server'
 import { GET as getVisitRecords } from '@/app/api/reports/[id]/visit_records/route'
 import {
@@ -6,6 +6,7 @@ import {
   seedTestUsers,
   seedTestCustomers,
   createTestReport,
+  prisma,
   TEST_USERS,
   TEST_CUSTOMERS,
 } from '../helpers/db'
@@ -34,6 +35,10 @@ describe('訪問記録API', () => {
     await clearDatabase()
     await seedTestUsers()
     await seedTestCustomers()
+  })
+
+  afterAll(async () => {
+    await prisma.$disconnect()
   })
 
   describe('GET /reports/:id/visit_records → sort_order 昇順で返す', () => {

@@ -61,17 +61,15 @@ export async function clearDatabase(): Promise<void> {
 }
 
 export async function seedTestUsers(): Promise<void> {
-  for (const user of Object.values(TEST_USERS)) {
-    await prisma.user.create({
-      data: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        passwordHash: PASSWORD_HASH,
-        role: user.role as Role,
-      },
-    })
-  }
+  await prisma.user.createMany({
+    data: Object.values(TEST_USERS).map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      passwordHash: PASSWORD_HASH,
+      role: user.role as Role,
+    })),
+  })
 }
 
 export async function seedTestCustomers(): Promise<void> {
