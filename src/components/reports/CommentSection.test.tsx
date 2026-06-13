@@ -51,13 +51,13 @@ const mockComments: Comment[] = [
   {
     id: 'comment-1',
     body: 'コメント本文1',
-    user: { id: 'user-manager-1', name: '田中 部長' },
+    commenter: { id: 'user-manager-1', name: '田中 部長', role: 'manager' },
     created_at: '2026-05-01T10:00:00Z',
   },
   {
     id: 'comment-2',
     body: 'コメント本文2',
-    user: { id: 'user-manager-2', name: '佐藤 部長' },
+    commenter: { id: 'user-manager-2', name: '佐藤 部長', role: 'manager' },
     created_at: '2026-05-01T09:00:00Z',
   },
 ]
@@ -144,7 +144,7 @@ describe('CommentSection', () => {
       const newComment: Comment = {
         id: 'comment-new',
         body: '新しいコメント',
-        user: { id: 'user-manager-1', name: '田中 部長' },
+        commenter: { id: 'user-manager-1', name: '田中 部長', role: 'manager' },
         created_at: '2026-05-02T10:00:00Z',
       }
       vi.mocked(apiClient.post).mockResolvedValue({ data: newComment })
@@ -169,7 +169,7 @@ describe('CommentSection', () => {
       const newComment: Comment = {
         id: 'comment-new',
         body: '新しいコメント',
-        user: { id: 'user-manager-1', name: '田中 部長' },
+        commenter: { id: 'user-manager-1', name: '田中 部長', role: 'manager' },
         created_at: '2026-05-02T10:00:00Z',
       }
       vi.mocked(apiClient.post).mockResolvedValue({ data: newComment })
