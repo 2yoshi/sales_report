@@ -22,7 +22,7 @@ import type { AuthUser } from '@/types'
 export interface Comment {
   id: string
   body: string
-  user: { id: string; name: string }
+  commenter: { id: string; name: string; role: string }
   created_at: string
 }
 
@@ -97,7 +97,7 @@ export function CommentSection({
 
   function canDeleteComment(comment: Comment): boolean {
     if (currentUser.role === 'admin') return true
-    return comment.user.id === currentUser.id
+    return comment.commenter.id === currentUser.id
   }
 
   return (
@@ -125,7 +125,7 @@ export function CommentSection({
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm font-medium">
-                  {comment.user.name}
+                  {comment.commenter.name}
                   <span className="ml-2 text-xs text-muted-foreground font-normal">
                     {formatDateTimeJst(comment.created_at)}
                   </span>
@@ -137,7 +137,7 @@ export function CommentSection({
                     size="sm"
                     className="text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => void handleDelete(comment.id)}
-                    aria-label={`${comment.user.name}のコメントを削除`}
+                    aria-label={`${comment.commenter.name}のコメントを削除`}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden="true" />
                     削除
