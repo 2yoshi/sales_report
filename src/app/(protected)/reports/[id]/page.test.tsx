@@ -125,7 +125,7 @@ const mockComments = [
   {
     id: 'comment-1',
     body: 'コメント本文',
-    user: { id: 'user-manager-1', name: '田中 部長' },
+    commenter: { id: 'user-manager-1', name: '田中 部長', role: 'manager' },
     created_at: '2026-05-01T18:00:00Z',
   },
 ]
